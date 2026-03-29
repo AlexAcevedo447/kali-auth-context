@@ -12,14 +12,15 @@ func main() {
 	cfg := config.LoadConfig()
 
 	log, err := logger.New()
-
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	defer log.Sync()
+
+	defer func() {
+		_ = log.Sync()
+	}()
 
 	pool, err := db.NewPool(cfg)
-
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -27,10 +28,9 @@ func main() {
 	defer pool.Close()
 
 	app := fiber.New()
-	
+
 	log.Info("Server running on port " + cfg.AppPort)
 	err = app.Listen(":" + cfg.AppPort)
-
 	if err != nil {
 		log.Fatal(err.Error())
 	}

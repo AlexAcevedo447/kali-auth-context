@@ -1,27 +1,31 @@
 package db
 
 import (
-	"context"
+	"database/sql"
 	"fmt"
 
-	"kali-auth-context/internal/infrastructure/config"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
+	"github.com/uptrace/bun/driver/pgdriver"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"kali-auth-context/internal/infrastructure/config"
 )
 
-func NewPool(cfg *config.Config) (*pgxpool.Pool, error) {
+func NewPool(cfg *config.Config) (*bun.DB, error) {
 	databaseUrl := fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=5432 sslmode=disable",
-		cfg.DBHost,
+		"postgres://%s:%s@%s:5432/%s?sslmode=%s",
 		cfg.DBUser,
 		cfg.DBPass,
+		cfg.DBHost,
 		cfg.DBName,
+		cfg.DBSSLMode,
 	)
 
-	poolCfg, err := pgxpool.ParseConfig(databaseUrl)
-	if err != nil {
-		return nil, err
-	}
+	sqldb := sql.OpenDB(pgdriver.NewConnector(
+		pgdriver.WithDSN(databaseUrl),
+	))
 
-	return pgxpool.NewWithConfig(context.Background(), poolCfg)
+	db := bun.NewDB(sqldb, pgdialect.New())
+
+	return db, nil
 }

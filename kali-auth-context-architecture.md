@@ -8,18 +8,21 @@ Service**, encargado de autenticación, autorización y gestión de
 identidad.
 
 El sistema inicia como un servicio de facturación, pero está diseñado
-para escalar a un ERP completo.
+para escalar a un ERP completo, priorizando rendimiento, claridad
+arquitectónica y mantenibilidad.
 
 ------------------------------------------------------------------------
 
 ## 🧠 Principios Arquitectónicos
 
--   SOLID
--   Domain Driven Design (DDD)
--   Arquitectura Hexagonal (Ports & Adapters)
--   CQRS (Command Query Responsibility Segregation)
--   Clean Architecture mindset
--   Dependency Injection Wire (Go way)
+-   SOLID\
+-   Domain Driven Design (DDD)\
+-   Arquitectura Hexagonal (Ports & Adapters)\
+-   CQRS (Command Query Responsibility Segregation)\
+-   Clean Architecture mindset\
+-   Dependency Injection con Wire\
+-   Separación estricta de responsabilidades\
+-   Production-ready mindset (graceful shutdown + limpieza de recursos)
 
 ------------------------------------------------------------------------
 
@@ -27,34 +30,38 @@ para escalar a un ERP completo.
 
 ### Backend
 
--   **Go (Golang)** → lenguaje principal
--   **Fiber** → framework HTTP
--   **pgx + pgxpool** → driver PostgreSQL de alto rendimiento
+-   **Go (Golang)** → lenguaje principal\
+-   **Fiber** → framework HTTP\
+-   **Bun ORM** → ORM sobre `database/sql`\
 -   **PostgreSQL** → base de datos principal
 
-### Calidad de Código
-
--   gofumpt → formateo
--   goimports → organización de imports
--   golangci-lint → linting profesional
+> Se elimina `pgxpool` directo y se utiliza Bun como capa ORM escalable,
+> manteniendo alto rendimiento y mejor experiencia de desarrollo.
 
 ------------------------------------------------------------------------
 
 ## 🗂️ Estructura Base del Proyecto
 
-
     cmd/
       api/
-        main.go   # composition root
+        main.go   # Composition Root
 
     internal/
-      identity/
-        domain/
-        application/
-          ports/
-        infrastructure/
+      domain/
+        identity/
+
+      application/
+        commands/
+        queries/
+        ports/
+
+      infrastructure/
+        config/
+        db/
+        persistence/
           postgres/
-          http/
+        http/
+        logger/
 
 ------------------------------------------------------------------------
 
@@ -62,92 +69,130 @@ para escalar a un ERP completo.
 
 ### Dominio
 
-Contiene entidades puras y lógica de negocio sin dependencias externas.
+-   Entidades puras (`User`)
+-   Value Objects (`UserId`)
+-   Sin dependencias externas
+-   Sin lógica técnica (hash, DB, HTTP)
 
-### Puertos (Ports)
+------------------------------------------------------------------------
 
-Interfaces que definen contratos:
+### Application Layer
 
--   UserCommandRepository
--   UserQueryRepository
--   TransactionManager
+#### Commands (escritura)
 
-Separados por CQRS:
+-   1 command por caso de uso
+-   1 repository por interfaz
+-   DTOs separados del dominio
+-   Validaciones y hashing en la capa de aplicación
 
--   Commands → escritura
--   Queries → lectura
+#### Queries (lectura)
 
-### Adaptadores (Infrastructure)
+-   Separadas de commands (CQRS real)
+-   1 repository por interfaz
+-   Orientadas a lectura eficiente
+
+------------------------------------------------------------------------
+
+### Ports
+
+Cada responsabilidad tiene su propio contrato:
+
+#### Commands
+
+-   `ICreateUserCommandRepository`
+-   `IUpdateUserCommandRepository`
+-   `IDeleteUserCommandRepository`
+
+#### Queries
+
+-   `IGetUserByIdQueryRepository`
+-   `IGetUserByEmailQueryRepository`
+-   `IListUsersQueryRepository`
+
+#### Servicios transversales
+
+-   `IPasswordHasher`
+-   `IUUIDProvider`
+
+No se combinan responsabilidades en una misma implementación.
+
+------------------------------------------------------------------------
+
+### Infrastructure
 
 Implementaciones concretas:
 
--   PostgreSQL repositories
+-   Repositories con Bun
 -   HTTP handlers (Fiber)
+-   Logger estructurado
+-   Config loader
+-   DB connection factory
 
 ------------------------------------------------------------------------
 
 ## 🔄 Flujo de Inicialización (main.go)
 
+El `main.go` actúa como **Composition Root**.
+
+Flujo actual:
+
 1.  Load config (.env)
-2.  Create logger
-3.  Connect DB (pgxpool)
-4.  Crear repositories
-5.  Crear usecases
-6.  Crear handlers
-7.  Registrar rutas
-8.  Start server
+2.  Crear logger
+3.  Crear conexión Bun (`*bun.DB`)
+4.  Registrar `defer` para limpieza
+5.  Inyectar dependencias (Wire)
+6.  Crear HTTP server
+7.  Start server
+8.  Graceful shutdown
+9.  Cierre ordenado de recursos
 
-El main.go actúa como **Composition Root** para la inyección de
-dependencias.
+La conexión a base de datos:
 
-------------------------------------------------------------------------
+-   Se crea una vez
+-   Vive durante todo el proceso
+-   Se cierra cuando el servicio termina
 
-## 🗄️ Configuración
-
-Variables de entorno actuales:
-
--   APP_PORT
--   DB_HOST
--   DB_USER
--   DB_PASS
--   DB_NAME
-
-Conexión construida mediante DSN keyword format para pgx.
+Nunca se abre ni se cierra por request.
 
 ------------------------------------------------------------------------
 
-## 🚀 Estado Actual
+## 🔐 Seguridad y Futuro
 
-✅ Servidor Fiber levantado\
-✅ Conexión PostgreSQL funcionando\
-✅ Arquitectura base definida\
-🔄 Pendiente iniciar capa de dominio (Identity)
-
-------------------------------------------------------------------------
-
-## 🎯 Objetivo del Identity Service
-
--   Registro de usuarios
--   Login
--   Manejo de roles y permisos
--   Tokens JWT (futuro)
+-   Hashing de contraseñas vía `IPasswordHasher`
+-   JWT validation externa (Keycloak)
+-   Preparado para roles y permisos
 -   Alta concurrencia
 -   Preparado para escalabilidad horizontal
 
 ------------------------------------------------------------------------
 
-## 🧩 Notas Importantes
+## 🚀 Estado Actual
 
--   No se utilizan monolitos.
--   Cada microservicio tendrá su propia base de datos.
--   Se prioriza claridad arquitectónica antes de escalar
-    funcionalidades.
--   DI manual para mantener control explícito de dependencias.
+✅ Arquitectura hexagonal definida\
+✅ CQRS real separado\
+✅ Bun integrado como ORM\
+✅ Connection lifecycle controlado desde main\
+✅ Limpieza de recursos con `defer`\
+🔄 Implementación completa de repositories en progreso
+
+------------------------------------------------------------------------
+
+## 🧩 Decisiones Clave
+
+-   No monolito.
+-   Cada microservicio tiene su propia base de datos.
+-   No mezclar commands y queries.
+-   No abrir/cerrar DB por request.
+-   No lógica técnica en dominio.
+-   Todo recurso externo debe cerrarse correctamente.
+-   Arquitectura pensada para entorno crítico (identity + billing).
 
 ------------------------------------------------------------------------
 
 ## 📎 Uso de este archivo
 
-Este archivo sirve como **contexto portable** para continuar el
-desarrollo del proyecto en futuras sesiones. Puede cargarse nuevamente
-para restaurar el estado conceptual del sistema.
+Este archivo sirve como **contexto portable actualizado** para continuar
+el desarrollo en futuras sesiones.
+
+Puede cargarse nuevamente para restaurar el estado conceptual y técnico
+del sistema sin perder coherencia arquitectónica.
