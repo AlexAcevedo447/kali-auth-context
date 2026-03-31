@@ -3,10 +3,12 @@ package commands
 import (
 	"context"
 	"kali-auth-context/internal/domain/identity"
+	"kali-auth-context/internal/domain/policies"
 	"kali-auth-context/internal/ports"
 )
 
 type CreateUserDto struct {
+	TenantId             identity.TenantId
 	IdentificationNumber string
 	Username             string
 	Email                string
@@ -19,12 +21,15 @@ type CreateUserCommand struct {
 	hasher   ports.IPasswordHasher
 }
 
-
 func NewCreateUserCommand(repo ports.ICreateUserCommandRepository, provider ports.IUUIDProvider, hasher ports.IPasswordHasher) *CreateUserCommand {
 	return &CreateUserCommand{repo: repo, provider: provider, hasher: hasher}
 }
 
 func (c *CreateUserCommand) Execute(ctx context.Context, user *CreateUserDto) error {
+	if err := policies.ValidatePasswordStrength(user.Password); err != nil {
+		return err
+	}
+
 	id := identity.UserId(c.provider.Generate())
 
 	hashedPassword, err := c.hasher.Hash(user.Password)
@@ -35,6 +40,7 @@ func (c *CreateUserCommand) Execute(ctx context.Context, user *CreateUserDto) er
 
 	domainUser, err := identity.NewUser(
 		id,
+		user.TenantId,
 		user.IdentificationNumber,
 		user.Username,
 		user.Email,

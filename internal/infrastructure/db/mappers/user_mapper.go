@@ -8,6 +8,7 @@ import (
 func ToDomainUser(userModel *models.UserModel) (*identity.User, error) {
 	return identity.NewUser(
 		identity.UserId(userModel.Id),
+		identity.TenantId(userModel.TenantId),
 		userModel.IdentificationNumber,
 		userModel.Username,
 		userModel.Email,
@@ -18,6 +19,7 @@ func ToDomainUser(userModel *models.UserModel) (*identity.User, error) {
 func ToUserModel(user *identity.User) *models.UserModel {
 	return &models.UserModel{
 		Id:                   identity.UserId(user.Id),
+		TenantId:             identity.TenantId(user.TenantId),
 		IdentificationNumber: user.IdentificationNumber,
 		Username:             user.Username,
 		Email:                user.Email,

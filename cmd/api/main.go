@@ -1,37 +1,39 @@
 package main
 
 import (
-	"kali-auth-context/internal/infrastructure/config"
-	"kali-auth-context/internal/infrastructure/db"
+	stdlog "log"
+
+	bootstrap "kali-auth-context/internal/bootstrap/di"
 	"kali-auth-context/internal/infrastructure/logger"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 func main() {
-	cfg := config.LoadConfig()
-
-	log, err := logger.New()
+	container, err := bootstrap.InitializeContainer()
 	if err != nil {
-		log.Fatal(err.Error())
+		stdlog.Fatalf("failed to initialize container: %v", err)
+	}
+	defer func() {
+		if closeErr := container.Close(); closeErr != nil {
+			stdlog.Printf("failed to close container resources: %v", closeErr)
+		}
+	}()
+
+	appLogger, err := logger.New()
+	if err != nil {
+		stdlog.Fatalf("failed to initialize logger: %v", err)
 	}
 
 	defer func() {
-		_ = log.Sync()
+		_ = appLogger.Sync()
 	}()
 
-	pool, err := db.NewPool(cfg)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-
-	defer pool.Close()
-
 	app := fiber.New()
+	container.HTTP.Router.Register(app)
 
-	log.Info("Server running on port " + cfg.AppPort)
-	err = app.Listen(":" + cfg.AppPort)
-	if err != nil {
-		log.Fatal(err.Error())
+	appLogger.Info("Server running on port " + container.Config.AppPort)
+	if err := app.Listen(":" + container.Config.AppPort); err != nil {
+		appLogger.Fatal(err.Error())
 	}
 }

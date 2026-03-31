@@ -7,6 +7,7 @@ import (
 
 type UserModel struct {
 	Id                   identity.UserId `bun:",pk"`
+	TenantId             identity.TenantId
 	IdentificationNumber string
 	Username             string
 	Email                string

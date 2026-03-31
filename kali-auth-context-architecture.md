@@ -1,198 +1,78 @@
-# 🧱 Kali Auth Context --- Arquitectura del Microservicio Identity
+# Kali Auth Context
 
-## 📌 Descripción General
+## Propósito
+Microservicio de identidad para un ERP modular. Hoy cubre autenticación, autorización, usuarios, tenants y RBAC, con aislamiento por tenant como regla base del dominio y de la aplicación.
 
-Este proyecto forma parte de un ERP modular construido bajo arquitectura
-de microservicios. El microservicio actual corresponde al **Identity
-Service**, encargado de autenticación, autorización y gestión de
-identidad.
+## Stack
+- Go
+- Fiber
+- Bun ORM sobre database/sql
+- PostgreSQL
+- Wire para composición
+- Zap logger
 
-El sistema inicia como un servicio de facturación, pero está diseñado
-para escalar a un ERP completo, priorizando rendimiento, claridad
-arquitectónica y mantenibilidad.
+## Arquitectura
+- DDD + Hexagonal + CQRS
+- Commands y queries separados por caso de uso
+- Un contrato por responsabilidad en ports
+- Dominio sin dependencias técnicas
+- HTTP organizado por contexto y por commands/queries
+- Handlers SRP: un handler por endpoint/unidad de trabajo
 
-------------------------------------------------------------------------
+## Estructura real
+- cmd/api/main.go: composition root, crea app Fiber, resuelve contenedor y registra router
+- internal/domain/identity: user, tenant, role, permission, user_role, role_permission, errores de auth/autorización
+- internal/domain/policies: password_policy y authorization_policy
+- internal/application:
+  - auth/commands: login
+  - authorization/queries: authorize
+  - user/commands y user/queries
+  - tenant/commands y tenant/queries
+  - rbac/commands y rbac/queries
+- internal/ports: contratos separados para user, tenant, role, permission, user_role, role_permission, password_hasher y uuid_provider
+- internal/infrastructure/db:
+  - models y mappers
+  - repositories separados por contexto y por command/query
+- internal/infrastructure/http:
+  - contexts/auth, authorization, user, tenant, rbac
+  - cada contexto separado en commands/queries
+  - routes/router.go registra root, health y api/v1
+  - shared/errors.go centraliza mapeo de errores HTTP
+- internal/bootstrap/di: ensamblado completo del contenedor y del router
 
-## 🧠 Principios Arquitectónicos
+## Reglas funcionales actuales
+- User siempre pertenece a un tenant
+- Tenant puede estar ACTIVE o SUSPENDED
+- Authorization valida:
+  - request válida
+  - tenant activo
+  - usuario perteneciente al tenant
+  - permisos efectivos por roles
+- Login es tenant-aware
+- Login mitiga enumeración con fake hash y soporta NeedsRehash
+- Password policy exige mínimo 12 caracteres, mayúscula, minúscula, dígito, símbolo y sin espacios
+- Password hasher actual: Argon2id con compatibilidad de verificación para hashes bcrypt heredados
 
--   SOLID\
--   Domain Driven Design (DDD)\
--   Arquitectura Hexagonal (Ports & Adapters)\
--   CQRS (Command Query Responsibility Segregation)\
--   Clean Architecture mindset\
--   Dependency Injection con Wire\
--   Separación estricta de responsabilidades\
--   Production-ready mindset (graceful shutdown + limpieza de recursos)
+## API expuesta
+- / and /health
+- /api/v1/auth/login
+- /api/v1/auth/authorize
+- /api/v1/users
+- /api/v1/tenants
+- /api/v1/roles
+- /api/v1/permissions
+- /api/v1/rbac
 
-------------------------------------------------------------------------
+## Estado actual
+- Core domain/application/infrastructure implementado
+- Repositories Bun implementados por responsabilidad
+- Router principal conectado desde main
+- HTTP migrado a handlers SRP por contexto
+- Paquete legacy de handlers eliminado
+- go test ./... en verde
 
-## ⚙️ Tecnologías Seleccionadas
-
-### Backend
-
--   **Go (Golang)** → lenguaje principal\
--   **Fiber** → framework HTTP\
--   **Bun ORM** → ORM sobre `database/sql`\
--   **PostgreSQL** → base de datos principal
-
-> Se elimina `pgxpool` directo y se utiliza Bun como capa ORM escalable,
-> manteniendo alto rendimiento y mejor experiencia de desarrollo.
-
-------------------------------------------------------------------------
-
-## 🗂️ Estructura Base del Proyecto
-
-    cmd/
-      api/
-        main.go   # Composition Root
-
-    internal/
-      domain/
-        identity/
-
-      application/
-        commands/
-        queries/
-        ports/
-
-      infrastructure/
-        config/
-        db/
-        persistence/
-          postgres/
-        http/
-        logger/
-
-------------------------------------------------------------------------
-
-## 🔌 Arquitectura Hexagonal
-
-### Dominio
-
--   Entidades puras (`User`)
--   Value Objects (`UserId`)
--   Sin dependencias externas
--   Sin lógica técnica (hash, DB, HTTP)
-
-------------------------------------------------------------------------
-
-### Application Layer
-
-#### Commands (escritura)
-
--   1 command por caso de uso
--   1 repository por interfaz
--   DTOs separados del dominio
--   Validaciones y hashing en la capa de aplicación
-
-#### Queries (lectura)
-
--   Separadas de commands (CQRS real)
--   1 repository por interfaz
--   Orientadas a lectura eficiente
-
-------------------------------------------------------------------------
-
-### Ports
-
-Cada responsabilidad tiene su propio contrato:
-
-#### Commands
-
--   `ICreateUserCommandRepository`
--   `IUpdateUserCommandRepository`
--   `IDeleteUserCommandRepository`
-
-#### Queries
-
--   `IGetUserByIdQueryRepository`
--   `IGetUserByEmailQueryRepository`
--   `IListUsersQueryRepository`
-
-#### Servicios transversales
-
--   `IPasswordHasher`
--   `IUUIDProvider`
-
-No se combinan responsabilidades en una misma implementación.
-
-------------------------------------------------------------------------
-
-### Infrastructure
-
-Implementaciones concretas:
-
--   Repositories con Bun
--   HTTP handlers (Fiber)
--   Logger estructurado
--   Config loader
--   DB connection factory
-
-------------------------------------------------------------------------
-
-## 🔄 Flujo de Inicialización (main.go)
-
-El `main.go` actúa como **Composition Root**.
-
-Flujo actual:
-
-1.  Load config (.env)
-2.  Crear logger
-3.  Crear conexión Bun (`*bun.DB`)
-4.  Registrar `defer` para limpieza
-5.  Inyectar dependencias (Wire)
-6.  Crear HTTP server
-7.  Start server
-8.  Graceful shutdown
-9.  Cierre ordenado de recursos
-
-La conexión a base de datos:
-
--   Se crea una vez
--   Vive durante todo el proceso
--   Se cierra cuando el servicio termina
-
-Nunca se abre ni se cierra por request.
-
-------------------------------------------------------------------------
-
-## 🔐 Seguridad y Futuro
-
--   Hashing de contraseñas vía `IPasswordHasher`
--   JWT validation externa (Keycloak)
--   Preparado para roles y permisos
--   Alta concurrencia
--   Preparado para escalabilidad horizontal
-
-------------------------------------------------------------------------
-
-## 🚀 Estado Actual
-
-✅ Arquitectura hexagonal definida\
-✅ CQRS real separado\
-✅ Bun integrado como ORM\
-✅ Connection lifecycle controlado desde main\
-✅ Limpieza de recursos con `defer`\
-🔄 Implementación completa de repositories en progreso
-
-------------------------------------------------------------------------
-
-## 🧩 Decisiones Clave
-
--   No monolito.
--   Cada microservicio tiene su propia base de datos.
--   No mezclar commands y queries.
--   No abrir/cerrar DB por request.
--   No lógica técnica en dominio.
--   Todo recurso externo debe cerrarse correctamente.
--   Arquitectura pensada para entorno crítico (identity + billing).
-
-------------------------------------------------------------------------
-
-## 📎 Uso de este archivo
-
-Este archivo sirve como **contexto portable actualizado** para continuar
-el desarrollo en futuras sesiones.
-
-Puede cargarse nuevamente para restaurar el estado conceptual y técnico
-del sistema sin perder coherencia arquitectónica.
+## Notas de continuidad
+- Mantener tenant propagation en dominio, aplicación, repositorios y HTTP
+- No reagrupar handlers por contexto en una sola clase
+- No mezclar commands con queries
+- Si se agrega funcionalidad nueva, seguir el patrón: dominio -> ports -> repository -> use case -> handler -> router -> DI

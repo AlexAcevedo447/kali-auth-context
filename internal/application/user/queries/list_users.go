@@ -15,6 +15,6 @@ func NewListUsersQuery(query ports.IListUsersQueryRepository) *ListUsersQuery {
 	}
 }
 
-func (q *ListUsersQuery) Handle() ([]*identity.User, error) {
-	return q.query.List()
+func (q *ListUsersQuery) Handle(tenantId identity.TenantId) ([]*identity.User, error) {
+	return q.query.List(tenantId)
 }

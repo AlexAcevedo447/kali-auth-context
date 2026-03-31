@@ -15,6 +15,6 @@ func NewGetUserByIdQuery(query ports.IGetUserByIdQueryRepository) *GetUserByIdQu
 	}
 }
 
-func (q *GetUserByIdQuery) Handle(id identity.UserId) (*identity.User, error) {
-	return q.query.GetById(identity.UserId(id))
+func (q *GetUserByIdQuery) Handle(tenantId identity.TenantId, id identity.UserId) (*identity.User, error) {
+	return q.query.GetById(tenantId, identity.UserId(id))
 }

@@ -15,6 +15,6 @@ func NewGetUserByEmailQuery(query ports.IGetUserByEmailQueryRepository) *GetUser
 	}
 }
 
-func (q *GetUserByEmailQuery) Handle(email string) (*identity.User, error) {
-	return q.query.GetByEmail(email)
+func (q *GetUserByEmailQuery) Handle(tenantId identity.TenantId, email string) (*identity.User, error) {
+	return q.query.GetByEmail(tenantId, email)
 }

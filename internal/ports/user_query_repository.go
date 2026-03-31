@@ -3,13 +3,13 @@ package ports
 import "kali-auth-context/internal/domain/identity"
 
 type IGetUserByIdQueryRepository interface {
-	GetById(userId identity.UserId) (*identity.User, error)
+	GetById(tenantId identity.TenantId, userId identity.UserId) (*identity.User, error)
 }
 
 type IGetUserByEmailQueryRepository interface {
-	GetByEmail(email string) (*identity.User, error)
+	GetByEmail(tenantId identity.TenantId, email string) (*identity.User, error)
 }
 
 type IListUsersQueryRepository interface {
-	List() ([]*identity.User, error)
+	List(tenantId identity.TenantId) ([]*identity.User, error)
 }

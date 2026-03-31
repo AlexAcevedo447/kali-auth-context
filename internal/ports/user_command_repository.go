@@ -15,5 +15,5 @@ type IUpdateUserCommandRepository interface {
 }
 
 type IDeleteUserCommandRepository interface {
-	Delete(ctx context.Context, userId identity.UserId) error
+	Delete(ctx context.Context, tenantId identity.TenantId, userId identity.UserId) error
 }
