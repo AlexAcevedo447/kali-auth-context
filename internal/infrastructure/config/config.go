@@ -23,8 +23,10 @@ type Config struct {
 	DBSSLMode string
 
 	// JWT
-	JWTIssuer   string
-	JWTAudience string
+	JWTIssuer                string
+	JWTAudience              string
+	JWTSecret                string
+	JWTAccessTokenTTLMinutes int
 
 	// Keycloak
 	KeycloakURL   string
@@ -46,8 +48,10 @@ func LoadConfig() *Config {
 		DBName:    os.Getenv("DB_NAME"),
 		DBSSLMode: os.Getenv("DB_SSLMODE"),
 
-		JWTIssuer:   os.Getenv("JWT_ISSUER"),
-		JWTAudience: os.Getenv("JWT_AUDIENCE"),
+		JWTIssuer:                os.Getenv("JWT_ISSUER"),
+		JWTAudience:              os.Getenv("JWT_AUDIENCE"),
+		JWTSecret:                os.Getenv("JWT_SECRET"),
+		JWTAccessTokenTTLMinutes: getEnvAsIntOrDefault("JWT_ACCESS_TOKEN_TTL_MINUTES", 60),
 
 		KeycloakURL:   os.Getenv("KEYCLOAK_URL"),
 		KeycloakRealm: os.Getenv("KEYCLOAK_REALM"),
@@ -64,6 +68,20 @@ func (c *Config) getEnv(key string) string {
 
 func (c *Config) getEnvAsInt(key string) int {
 	valueStr := os.Getenv(key)
+
+	value, err := strconv.Atoi(valueStr)
+	if err != nil {
+		log.Fatalf("Environment variable %s must be a valid integer", key)
+	}
+
+	return value
+}
+
+func getEnvAsIntOrDefault(key string, defaultValue int) int {
+	valueStr := os.Getenv(key)
+	if valueStr == "" {
+		return defaultValue
+	}
 
 	value, err := strconv.Atoi(valueStr)
 	if err != nil {

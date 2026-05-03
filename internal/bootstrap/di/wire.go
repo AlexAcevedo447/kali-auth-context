@@ -1,6 +1,9 @@
 package bootstrap
 
 import (
+	"context"
+	"time"
+
 	"github.com/google/wire"
 
 	authcommands "kali-auth-context/internal/application/auth/commands"
@@ -13,6 +16,7 @@ import (
 	userqueries "kali-auth-context/internal/application/user/queries"
 	"kali-auth-context/internal/infrastructure/config"
 	"kali-auth-context/internal/infrastructure/db"
+	idempotencyrepo "kali-auth-context/internal/infrastructure/db/repositories/idempotency"
 	rbaccmdrepo "kali-auth-context/internal/infrastructure/db/repositories/rbac/commands"
 	rbacqryrepo "kali-auth-context/internal/infrastructure/db/repositories/rbac/queries"
 	tenantcmdrepo "kali-auth-context/internal/infrastructure/db/repositories/tenant/commands"
@@ -27,6 +31,7 @@ import (
 	tenanthttpqueries "kali-auth-context/internal/infrastructure/http/contexts/tenant/queries"
 	userhttpcommands "kali-auth-context/internal/infrastructure/http/contexts/user/commands"
 	userhttpqueries "kali-auth-context/internal/infrastructure/http/contexts/user/queries"
+	"kali-auth-context/internal/infrastructure/http/middleware"
 	"kali-auth-context/internal/infrastructure/http/routes"
 	"kali-auth-context/internal/infrastructure/providers"
 	"kali-auth-context/internal/infrastructure/security"
@@ -49,8 +54,14 @@ func InitializeContainer() (*CoreContainer, error) {
 		return nil, err
 	}
 
+	migrator := db.NewMigrator(database)
+	if err := migrator.Migrate(context.Background()); err != nil {
+		return nil, err
+	}
+
 	uuidProvider := providers.NewUUIDProvider()
 	passwordHasher := security.NewArgon2idHasher()
+	accessTokenIssuer := security.NewAccessTokenIssuer(cfg)
 
 	createUserRepo := usercmdrepo.NewCreateUserCommandRepository(database)
 	updateUserRepo := usercmdrepo.NewUpdateUserCommandRepository(database)
@@ -84,10 +95,20 @@ func InitializeContainer() (*CoreContainer, error) {
 	getUserRolesRepo := rbacqryrepo.NewGetUserRolesQueryRepository(database)
 	getRolePermissionsRepo := rbacqryrepo.NewGetRolePermissionsQueryRepository(database)
 
+	idempotencyRepo := idempotencyrepo.NewIdempotencyRepository(database)
+	idempotencyMW := middleware.NewIdempotencyMiddleware(idempotencyRepo)
+
+	jwtAuthMW := middleware.NewJWTAuthMiddleware(middleware.JWTAuthConfig{
+		Secret:    cfg.JWTSecret,
+		Issuer:    cfg.JWTIssuer,
+		Audience:  cfg.JWTAudience,
+		ClockSkew: 30 * time.Second,
+	})
+
 	securityModule := NewSecurityModule(uuidProvider, passwordHasher)
 
 	authModule := NewAuthModule(
-		authcommands.NewLoginCommand(getUserByEmailRepo, passwordHasher),
+		authcommands.NewLoginCommand(getUserByEmailRepo, getUserRolesRepo, getRoleByIdRepo, getRolePermissionsRepo, getPermissionByIdRepo, passwordHasher),
 	)
 
 	authorizationModule := NewAuthorizationModule(
@@ -145,7 +166,7 @@ func InitializeContainer() (*CoreContainer, error) {
 		),
 	)
 
-	loginHandler := authhttpcommands.NewLoginHandler(authModule.Login)
+	loginHandler := authhttpcommands.NewLoginHandler(authModule.Login, accessTokenIssuer)
 	authorizeHandler := authorizationhttpqueries.NewCheckHandler(authorizationModule.Authorize)
 
 	createUserHandler := userhttpcommands.NewCreateHandler(userModule.Commands.Create)
@@ -184,6 +205,8 @@ func InitializeContainer() (*CoreContainer, error) {
 
 	httpModule := &HTTPModule{
 		Router: routes.NewRouter(
+			jwtAuthMW,
+			idempotencyMW,
 			loginHandler,
 			authorizeHandler,
 			createUserHandler,

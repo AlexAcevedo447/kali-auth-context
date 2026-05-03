@@ -13,7 +13,17 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// idempotencyHandler is a Fiber middleware. It is stored as a field so it can
+// be injected via the constructor and applied only to non-naturally-idempotent
+// POST endpoints (resource creation and relationship assignment).
+type idempotencyHandler = fiber.Handler
+
+// jwtAuthHandler is a Fiber middleware for JWT validation.
+type jwtAuthHandler = fiber.Handler
+
 type Router struct {
+	jwtAuth                    jwtAuthHandler
+	idempotency                idempotencyHandler
 	login                      *authcommands.LoginHandler
 	authorize                  *authorizationqueries.CheckHandler
 	createUser                 *usercommands.CreateHandler
@@ -49,6 +59,8 @@ type Router struct {
 }
 
 func NewRouter(
+	jwtAuth jwtAuthHandler,
+	idempotency idempotencyHandler,
 	login *authcommands.LoginHandler,
 	authorize *authorizationqueries.CheckHandler,
 	createUser *usercommands.CreateHandler,
@@ -83,6 +95,8 @@ func NewRouter(
 	getUserEffectivePermission *rbacqueries.GetUserEffectivePermissionsHandler,
 ) *Router {
 	return &Router{
+		jwtAuth:                    jwtAuth,
+		idempotency:                idempotency,
 		login:                      login,
 		authorize:                  authorize,
 		createUser:                 createUser,
@@ -133,44 +147,48 @@ func (r *Router) Register(app *fiber.App) {
 	api := app.Group("/api")
 	v1 := api.Group("/v1")
 
+	// Public endpoints (no JWT required)
 	v1.Post("/auth/login", r.login.Handle)
-	v1.Post("/auth/authorize", r.authorize.Handle)
 
-	users := v1.Group("/users")
-	users.Post("/", r.createUser.Handle)
+	// Protected endpoints (JWT required)
+	protected := v1.Group("", r.jwtAuth)
+	protected.Post("/auth/authorize", r.authorize.Handle)
+
+	users := protected.Group("/users")
+	users.Post("/", r.idempotency, r.createUser.Handle)
 	users.Get("/by-email", r.getUserByEmail.Handle)
 	users.Get("/", r.listUsers.Handle)
-	users.Put("/:userId", r.updateUser.Handle)
-	users.Delete("/:userId", r.deleteUser.Handle)
+	users.Put("/:userId", r.idempotency, r.updateUser.Handle)
+	users.Delete("/:userId", r.idempotency, r.deleteUser.Handle)
 	users.Get("/:userId", r.getUserById.Handle)
 
-	tenants := v1.Group("/tenants")
-	tenants.Post("/", r.createTenant.Handle)
+	tenants := protected.Group("/tenants")
+	tenants.Post("/", r.idempotency, r.createTenant.Handle)
 	tenants.Get("/by-name", r.getTenantByName.Handle)
 	tenants.Get("/", r.listTenants.Handle)
-	tenants.Put("/:tenantId", r.updateTenant.Handle)
-	tenants.Post("/:tenantId/activate", r.activateTenant.Handle)
-	tenants.Post("/:tenantId/suspend", r.suspendTenant.Handle)
+	tenants.Put("/:tenantId", r.idempotency, r.updateTenant.Handle)
+	tenants.Post("/:tenantId/activate", r.idempotency, r.activateTenant.Handle)
+	tenants.Post("/:tenantId/suspend", r.idempotency, r.suspendTenant.Handle)
 	tenants.Get("/:tenantId", r.getTenantById.Handle)
 
-	roles := v1.Group("/roles")
-	roles.Post("/", r.createRole.Handle)
+	roles := protected.Group("/roles")
+	roles.Post("/", r.idempotency, r.createRole.Handle)
 	roles.Get("/", r.listRoles.Handle)
-	roles.Put("/:roleId", r.updateRole.Handle)
-	roles.Delete("/:roleId", r.deleteRole.Handle)
+	roles.Put("/:roleId", r.idempotency, r.updateRole.Handle)
+	roles.Delete("/:roleId", r.idempotency, r.deleteRole.Handle)
 	roles.Get("/:roleId", r.getRoleById.Handle)
 
-	permissions := v1.Group("/permissions")
-	permissions.Post("/", r.createPermission.Handle)
+	permissions := protected.Group("/permissions")
+	permissions.Post("/", r.idempotency, r.createPermission.Handle)
 	permissions.Get("/", r.listPermissions.Handle)
-	permissions.Put("/:permissionId", r.updatePermission.Handle)
-	permissions.Delete("/:permissionId", r.deletePermission.Handle)
+	permissions.Put("/:permissionId", r.idempotency, r.updatePermission.Handle)
+	permissions.Delete("/:permissionId", r.idempotency, r.deletePermission.Handle)
 	permissions.Get("/:permissionId", r.getPermissionById.Handle)
 
-	rbac := v1.Group("/rbac")
-	rbac.Post("/users/roles/assign", r.assignRoleToUser.Handle)
+	rbac := protected.Group("/rbac")
+	rbac.Post("/users/roles/assign", r.idempotency, r.assignRoleToUser.Handle)
 	rbac.Post("/users/roles/remove", r.removeRoleFromUser.Handle)
-	rbac.Post("/roles/permissions/assign", r.assignPermissionToRole.Handle)
+	rbac.Post("/roles/permissions/assign", r.idempotency, r.assignPermissionToRole.Handle)
 	rbac.Post("/roles/permissions/remove", r.removePermissionFromRole.Handle)
 	rbac.Get("/users/roles", r.getUserRoles.Handle)
 	rbac.Get("/roles/permissions", r.getRolePermissions.Handle)
