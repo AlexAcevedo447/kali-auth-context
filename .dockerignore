@@ -1,0 +1,13 @@
+.git/
+tmp/
+vendor/
+*.md
+*.log
+.env*
+docker-compose*.yml
+Dockerfile*
+.idea/
+.vscode/
+coverage/
+.air.toml
+Makefile

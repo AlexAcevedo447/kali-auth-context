@@ -1,0 +1,99 @@
+services:
+  api:
+    container_name: kali-auth-api-prod
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: prod
+    environment:
+      APP_PORT: "8080"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: kali_auth_prod
+      DB_PASSWORD: kali_auth_prod_pass
+      DB_NAME: kali_auth_prod
+      DB_SSLMODE: disable
+      LOG_LEVEL: info
+      RABBITMQ_ENABLED: "true"
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: always
+    cpus: 1.0
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "/bin/busybox", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - kali-auth-prod-net
+
+  db:
+    container_name: kali-auth-db-prod
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kali_auth_prod
+      POSTGRES_PASSWORD: kali_auth_prod_pass
+      POSTGRES_DB: kali_auth_prod
+    volumes:
+      - db_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kali_auth_prod -d kali_auth_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: always
+    cpus: 1.0
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - kali-auth-prod-net
+
+  rabbitmq:
+    container_name: kali-auth-rabbitmq-prod
+    image: rabbitmq:3.13-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: always
+    cpus: 0.5
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - kali-auth-prod-net
+
+networks:
+  kali-auth-prod-net:
+    name: kali-auth-prod-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  db_data_prod:

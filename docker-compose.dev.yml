@@ -1,0 +1,81 @@
+services:
+  api:
+    container_name: kali-auth-api-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    env_file:
+      - .env.dev
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_SSLMODE: disable
+    ports:
+      - "${API_HOST_PORT:-8080}:8080"
+    volumes:
+      - .:/app
+      - /app/tmp
+      - /app/vendor
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - kali-auth-dev-net
+
+  db:
+    container_name: kali-auth-db-dev
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kali_auth_dev
+      POSTGRES_PASSWORD: kali_auth_pass
+      POSTGRES_DB: kali_auth_dev
+    volumes:
+      - db_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kali_auth_dev -d kali_auth_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: on-failure
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - kali-auth-dev-net
+
+  adminer:
+    container_name: kali-auth-adminer-dev
+    image: adminer
+    ports:
+      - "${ADMINER_HOST_PORT:-8081}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - kali-auth-dev-net
+
+networks:
+  kali-auth-dev-net:
+    name: kali-auth-dev-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.27.0.0/16
+
+volumes:
+  db_data_dev:
