@@ -20,10 +20,16 @@ func HasPermission(tenantId identity.TenantId, permissions []*identity.Permissio
 		if permission.TenantId != tenantId {
 			continue
 		}
-		if normalizeAuthorizationValue(permission.Resource) != normalizedResource {
+		permissionResource := normalizeAuthorizationValue(permission.Resource)
+		permissionAction := normalizeAuthorizationValue(permission.Action)
+
+		resourceAllowed := permissionResource == "*" || permissionResource == normalizedResource
+		actionAllowed := permissionAction == "*" || permissionAction == normalizedAction
+
+		if !resourceAllowed {
 			continue
 		}
-		if normalizeAuthorizationValue(permission.Action) != normalizedAction {
+		if !actionAllowed {
 			continue
 		}
 		return true

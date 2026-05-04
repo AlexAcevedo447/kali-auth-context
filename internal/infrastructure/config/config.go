@@ -1,9 +1,11 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -31,6 +33,17 @@ type Config struct {
 	// Keycloak
 	KeycloakURL   string
 	KeycloakRealm string
+
+	// Seed
+	SeedMasterEnabled              bool
+	SeedMasterTenantID             string
+	SeedMasterTenantName           string
+	SeedMasterUserID               string
+	SeedMasterIdentificationNumber string
+	SeedMasterUsername             string
+	SeedMasterEmail                string
+	SeedMasterPassword             string
+	SeedMasterPasswordFile         string
 }
 
 func LoadConfig() *Config {
@@ -55,7 +68,43 @@ func LoadConfig() *Config {
 
 		KeycloakURL:   os.Getenv("KEYCLOAK_URL"),
 		KeycloakRealm: os.Getenv("KEYCLOAK_REALM"),
+
+		SeedMasterEnabled:              getEnvAsBoolOrDefault("SEED_MASTER_ENABLED", false),
+		SeedMasterTenantID:             getEnvOrDefault("SEED_MASTER_TENANT_ID", "master-tenant"),
+		SeedMasterTenantName:           getEnvOrDefault("SEED_MASTER_TENANT_NAME", "Master Tenant"),
+		SeedMasterUserID:               getEnvOrDefault("SEED_MASTER_USER_ID", "master-user"),
+		SeedMasterIdentificationNumber: getEnvOrDefault("SEED_MASTER_IDENTIFICATION_NUMBER", "1000000000"),
+		SeedMasterUsername:             getEnvOrDefault("SEED_MASTER_USERNAME", "master"),
+		SeedMasterEmail:                getEnvOrDefault("SEED_MASTER_EMAIL", "master@local.dev"),
+		SeedMasterPassword:             os.Getenv("SEED_MASTER_PASSWORD"),
+		SeedMasterPasswordFile:         os.Getenv("SEED_MASTER_PASSWORD_FILE"),
 	}
+}
+
+func (c *Config) ResolveSeedMasterPassword() (string, error) {
+	if !c.SeedMasterEnabled {
+		return "", nil
+	}
+
+	if c.SeedMasterPasswordFile != "" {
+		bytes, err := os.ReadFile(c.SeedMasterPasswordFile)
+		if err != nil {
+			return "", fmt.Errorf("failed to read SEED_MASTER_PASSWORD_FILE: %w", err)
+		}
+
+		secret := strings.TrimSpace(string(bytes))
+		if secret == "" {
+			return "", fmt.Errorf("SEED_MASTER_PASSWORD_FILE is empty")
+		}
+
+		return secret, nil
+	}
+
+	if strings.TrimSpace(c.SeedMasterPassword) == "" {
+		return "", fmt.Errorf("SEED_MASTER_PASSWORD or SEED_MASTER_PASSWORD_FILE is required when SEED_MASTER_ENABLED=true")
+	}
+
+	return c.SeedMasterPassword, nil
 }
 
 func (c *Config) getEnv(key string) string {
@@ -89,6 +138,29 @@ func getEnvAsIntOrDefault(key string, defaultValue int) int {
 	}
 
 	return value
+}
+
+func getEnvOrDefault(key string, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+
+	return value
+}
+
+func getEnvAsBoolOrDefault(key string, defaultValue bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return defaultValue
+	}
+
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		log.Fatalf("Environment variable %s must be a valid boolean", key)
+	}
+
+	return parsed
 }
 
 func (c *Config) IsProduction() bool {

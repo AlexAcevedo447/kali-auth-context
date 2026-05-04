@@ -21,9 +21,21 @@ func NewMigrator(db *bun.DB) *Migrator {
 }
 
 func (m *Migrator) Migrate(ctx context.Context) error {
-	_, err := m.db.NewCreateTable().
-		Model((*models.IdempotencyModel)(nil)).
-		IfNotExists().
-		Exec(ctx)
-	return err
+	tables := []interface{}{
+		(*models.IdempotencyModel)(nil),
+		(*models.TenantModel)(nil),
+		(*models.UserModel)(nil),
+		(*models.RoleModel)(nil),
+		(*models.PermissionModel)(nil),
+		(*models.UserRoleModel)(nil),
+		(*models.RolePermissionModel)(nil),
+	}
+
+	for _, table := range tables {
+		if _, err := m.db.NewCreateTable().Model(table).IfNotExists().Exec(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

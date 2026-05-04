@@ -61,6 +61,10 @@ func InitializeContainer() (*CoreContainer, error) {
 
 	uuidProvider := providers.NewUUIDProvider()
 	passwordHasher := security.NewArgon2idHasher()
+	masterSeeder := db.NewMasterSeeder(database, cfg, passwordHasher)
+	if err := masterSeeder.Seed(context.Background()); err != nil {
+		return nil, err
+	}
 	accessTokenIssuer := security.NewAccessTokenIssuer(cfg)
 
 	createUserRepo := usercmdrepo.NewCreateUserCommandRepository(database)
