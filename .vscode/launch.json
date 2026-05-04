@@ -1,15 +1,54 @@
 {
   "version": "0.2.0",
   "configurations": [
+    // ─────────────────────────────────────────────────────────────
+    // OPCIÓN A: Debug local (sin Docker)
+    // Levanta solo la BD si la necesitas:
+    //   docker compose -f docker-compose.dev.yml --env-file .env.dev up db -d
+    // ─────────────────────────────────────────────────────────────
     {
-      "name": "Go: Debug API (local)",
+      "name": "Go: Local (sin Docker)",
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/api",
       "cwd": "${workspaceFolder}",
-      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "APP_PORT": "8080",
+        "APP_ENV": "development",
+        "DB_HOST": "localhost",
+        "DB_PORT": "5432",
+        "DB_USER": "kali_dev",
+        "DB_PASSWORD": "kali_dev_pass_change_me",
+        "DB_NAME": "kali_auth_dev",
+        "DB_SSLMODE": "disable",
+        "LOG_LEVEL": "debug",
+        "RABBITMQ_ENABLED": "false",
+        "SEED_MASTER_ENABLED": "false"
+      },
       "args": []
+    },
+
+    // ─────────────────────────────────────────────────────────────
+    // OPCIÓN B: Debug en Docker via Delve remoto
+    // 1. Levantar:
+    //    docker compose -f docker-compose.debug.yml --env-file .env.dev up
+    // 2. Ejecutar esta config cuando veas el mensaje de Delve
+    // ─────────────────────────────────────────────────────────────
+    {
+      "name": "Go: Docker (Delve remoto)",
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "remotePath": "/app",
+      "host": "127.0.0.1",
+      "port": 40000,
+      "substitutePath": [
+        {
+          "from": "${workspaceFolder}",
+          "to": "/app"
+        }
+      ]
     }
   ]
 }
