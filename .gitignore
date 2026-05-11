@@ -2,3 +2,5 @@
 .env.*
 !.env.example
 .secrets/
+# Permitir scripts de healthcheck
+!scripts/pg-healthcheck.sh

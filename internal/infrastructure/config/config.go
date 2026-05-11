@@ -54,12 +54,12 @@ func LoadConfig() *Config {
 		AppEnv:  os.Getenv("APP_ENV"),
 		AppPort: os.Getenv("APP_PORT"),
 
-		DBHost:    os.Getenv("DB_HOST"),
-		DBPort:    os.Getenv("DB_PORT"),
-		DBUser:    os.Getenv("DB_USER"),
-		DBPass:    os.Getenv("DB_PASSWORD"),
-		DBName:    os.Getenv("DB_NAME"),
-		DBSSLMode: os.Getenv("DB_SSLMODE"),
+		DBHost:    os.Getenv("POSTGRES_HOST"),
+		DBPort:    os.Getenv("POSTGRES_PORT"),
+		DBUser:    os.Getenv("POSTGRES_USER"),
+		DBPass:    os.Getenv("POSTGRES_PASSWORD"),
+		DBName:    os.Getenv("POSTGRES_DB"),
+		DBSSLMode: os.Getenv("POSTGRES_SSLMODE"),
 
 		JWTIssuer:                os.Getenv("JWT_ISSUER"),
 		JWTAudience:              os.Getenv("JWT_AUDIENCE"),

@@ -7,10 +7,7 @@ services:
       target: dev
     env_file:
       - ${APP_ENV_FILE:-.env.dev}
-    environment:
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_SSLMODE: disable
+    # Todas las variables de entorno se toman desde .env.dev
     ports:
       - "${API_HOST_PORT:-8080}:8080"
     volumes:
@@ -32,14 +29,13 @@ services:
   db:
     container_name: kali-auth-db-dev
     image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: kali_auth_dev
-      POSTGRES_PASSWORD: kali_auth_pass
-      POSTGRES_DB: kali_auth_dev
+    env_file:
+      - ${APP_ENV_FILE:-.env.dev}
     volumes:
       - db_data_dev:/var/lib/postgresql/data
+      - ./scripts/pg-healthcheck.sh:/app/scripts/pg-healthcheck.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kali_auth_dev -d kali_auth_dev"]
+      test: ["CMD-SHELL", "/app/scripts/pg-healthcheck.sh"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -79,3 +75,4 @@ networks:
 
 volumes:
   db_data_dev:
+

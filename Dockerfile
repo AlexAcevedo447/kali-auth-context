@@ -15,6 +15,9 @@ RUN go install github.com/air-verse/air@latest && \
 
 COPY . .
 
+# Copiar scripts de healthcheck y dar permisos de solo lectura
+RUN chmod 0555 scripts/pg-healthcheck.sh
+
 EXPOSE 8080
 CMD ["air", "-c", ".air.toml"]
 
