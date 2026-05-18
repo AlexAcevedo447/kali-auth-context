@@ -1,0 +1,108 @@
+{
+  "info": {
+    "_postman_id": "b1e1e1e1-1111-2222-3333-444455556666",
+    "name": "Kali Auth Context API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Colección de endpoints principales para Kali Auth Context."
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:18080/health",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tenant_id\": \"TENANT_ID\",\n  \"email\": \"usuario@correo.com\",\n  \"password\": \"contraseña123A!\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/auth/login",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "Registrar usuario",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tenant_id\": \"TENANT_ID\",\n  \"identification_number\": \"12345678\",\n  \"username\": \"usuario1\",\n  \"email\": \"usuario@correo.com\",\n  \"password\": \"contraseña123A!\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/users/",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "users", ""]
+        }
+      }
+    },
+    {
+      "name": "Obtener usuario por email",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/users/by-email?email=usuario@correo.com&tenant_id=TENANT_ID",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "users", "by-email"],
+          "query": [
+            { "key": "email", "value": "usuario@correo.com" },
+            { "key": "tenant_id", "value": "TENANT_ID" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Authorize (protegido)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tenant_id\": \"TENANT_ID\",\n  \"user_id\": \"USER_ID\",\n  \"resource\": \"recurso\",\n  \"action\": \"accion\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/auth/authorize",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "auth", "authorize"]
+        }
+      }
+    }
+  ],
+  "variable": [
+    { "key": "access_token", "value": "" }
+  ]
+}
