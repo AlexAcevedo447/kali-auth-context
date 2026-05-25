@@ -1,5 +1,5 @@
 services:
-  api:
+  auth-api:
     container_name: kali-auth-api-dev
     build:
       context: .
