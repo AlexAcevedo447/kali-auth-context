@@ -7,6 +7,9 @@ type UserId string
 var (
 	ErrEmailRequired    = errors.New("email is required")
 	ErrPasswordRequired = errors.New("password is required")
+	// ErrEmailAlreadyExists indica que ya existe un usuario con ese email
+	// dentro del mismo tenant (unicidad de email por tenant, no global).
+	ErrEmailAlreadyExists = errors.New("a user with this email already exists for this tenant")
 )
 
 type User struct {

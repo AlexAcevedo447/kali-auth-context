@@ -37,5 +37,19 @@ func (m *Migrator) Migrate(ctx context.Context) error {
 		}
 	}
 
+	// Unicidad de email por tenant (no global): dos usuarios del mismo tenant
+	// no pueden compartir email, pero el mismo email sí puede repetirse entre
+	// tenants distintos. Defensa definitiva contra condiciones de carrera,
+	// más allá de cualquier verificación previa a nivel de aplicación.
+	if _, err := m.db.NewCreateIndex().
+		Model((*models.UserModel)(nil)).
+		Index("idx_users_tenant_id_email_unique").
+		Column("tenant_id", "email").
+		Unique().
+		IfNotExists().
+		Exec(ctx); err != nil {
+		return err
+	}
+
 	return nil
 }

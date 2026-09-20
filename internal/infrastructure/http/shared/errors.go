@@ -23,6 +23,10 @@ func WriteError(c *fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	if errors.Is(err, identity.ErrEmailAlreadyExists) {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
+	}
+
 	if isValidationError(err) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
