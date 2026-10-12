@@ -56,6 +56,7 @@ type Router struct {
 	getUserRoles               *rbacqueries.GetUserRolesHandler
 	getRolePermissions         *rbacqueries.GetRolePermissionsHandler
 	getUserEffectivePermission *rbacqueries.GetUserEffectivePermissionsHandler
+	jwksHandler fiber.Handler
 }
 
 func NewRouter(
@@ -93,6 +94,7 @@ func NewRouter(
 	getUserRoles *rbacqueries.GetUserRolesHandler,
 	getRolePermissions *rbacqueries.GetRolePermissionsHandler,
 	getUserEffectivePermission *rbacqueries.GetUserEffectivePermissionsHandler,
+	jwksHandler fiber.Handler,
 ) *Router {
 	return &Router{
 		jwtAuth:                    jwtAuth,
@@ -128,8 +130,9 @@ func NewRouter(
 		listPermissions:            listPermissions,
 		getUserRoles:               getUserRoles,
 		getRolePermissions:         getRolePermissions,
-		getUserEffectivePermission: getUserEffectivePermission,
-	}
+		       getUserEffectivePermission: getUserEffectivePermission,
+		       jwksHandler:                jwksHandler,
+	       }
 }
 
 func (r *Router) Register(app *fiber.App) {

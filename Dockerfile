@@ -9,9 +9,9 @@ RUN go mod download
 
 FROM base AS dev
 
-RUN go install github.com/air-verse/air@latest && \
-    go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && \
-    go install github.com/google/wire/cmd/wire@latest
+RUN go install github.com/air-verse/air@v1.67.1 && \
+    go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 && \
+    go install github.com/google/wire/cmd/wire@v0.7.0
 
 COPY . .
 

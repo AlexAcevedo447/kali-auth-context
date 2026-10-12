@@ -65,7 +65,10 @@ func InitializeContainer() (*CoreContainer, error) {
 	if err := masterSeeder.Seed(context.Background()); err != nil {
 		return nil, err
 	}
-	accessTokenIssuer := security.NewAccessTokenIssuer(cfg)
+	accessTokenIssuer, err := security.NewAccessTokenIssuer(cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	createUserRepo := usercmdrepo.NewCreateUserCommandRepository(database)
 	updateUserRepo := usercmdrepo.NewUpdateUserCommandRepository(database)
@@ -207,44 +210,46 @@ func InitializeContainer() (*CoreContainer, error) {
 	getRolePermissionsHandler := rbachttpqueries.NewGetRolePermissionsHandler(rbacModule.Queries.GetRolePermissions)
 	getUserEffectivePermissionsHandler := rbachttpqueries.NewGetUserEffectivePermissionsHandler(rbacModule.Queries.GetUserEffectivePermissions)
 
-	httpModule := &HTTPModule{
-		Router: routes.NewRouter(
-			jwtAuthMW,
-			idempotencyMW,
-			loginHandler,
-			authorizeHandler,
-			createUserHandler,
-			updateUserHandler,
-			deleteUserHandler,
-			getUserByIdHandler,
-			getUserByEmailHandler,
-			listUsersHandler,
-			createTenantHandler,
-			updateTenantHandler,
-			activateTenantHandler,
-			suspendTenantHandler,
-			getTenantByIdHandler,
-			getTenantByNameHandler,
-			listTenantsHandler,
-			createRoleHandler,
-			updateRoleHandler,
-			deleteRoleHandler,
-			createPermissionHandler,
-			updatePermissionHandler,
-			deletePermissionHandler,
-			assignRoleToUserHandler,
-			removeRoleFromUserHandler,
-			assignPermissionToRoleHandler,
-			removePermissionFromRoleHandler,
-			getRoleByIdHandler,
-			listRolesHandler,
-			getPermissionByIdHandler,
-			listPermissionsHandler,
-			getUserRolesHandler,
-			getRolePermissionsHandler,
-			getUserEffectivePermissionsHandler,
-		),
-	}
+	       jwksHandler := security.NewJWKSHandler(accessTokenIssuer.PublicKey(), accessTokenIssuer.KeyID())
+	       httpModule := &HTTPModule{
+		       Router: routes.NewRouter(
+			       jwtAuthMW,
+			       idempotencyMW,
+			       loginHandler,
+			       authorizeHandler,
+			       createUserHandler,
+			       updateUserHandler,
+			       deleteUserHandler,
+			       getUserByIdHandler,
+			       getUserByEmailHandler,
+			       listUsersHandler,
+			       createTenantHandler,
+			       updateTenantHandler,
+			       activateTenantHandler,
+			       suspendTenantHandler,
+			       getTenantByIdHandler,
+			       getTenantByNameHandler,
+			       listTenantsHandler,
+			       createRoleHandler,
+			       updateRoleHandler,
+			       deleteRoleHandler,
+			       createPermissionHandler,
+			       updatePermissionHandler,
+			       deletePermissionHandler,
+			       assignRoleToUserHandler,
+			       removeRoleFromUserHandler,
+			       assignPermissionToRoleHandler,
+			       removePermissionFromRoleHandler,
+			       getRoleByIdHandler,
+			       listRolesHandler,
+			       getPermissionByIdHandler,
+			       listPermissionsHandler,
+			       getUserRolesHandler,
+			       getRolePermissionsHandler,
+			       getUserEffectivePermissionsHandler,
+			       jwksHandler,
+		       ),
+	       }
 
 	return NewCoreContainer(cfg, database, securityModule, authModule, authorizationModule, httpModule, userModule, tenantModule, rbacModule), nil
 }
