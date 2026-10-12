@@ -22,17 +22,17 @@ type jwks struct {
 }
 
 func NewJWKSHandler(pub *rsa.PublicKey, kid string) fiber.Handler {
-	       return func(c *fiber.Ctx) error {
-		       jwkKey := jwk{
-			       Kty: "RSA",
-			       Alg: "RS256",
-			       Use: "sig",
-			       Kid: kid,
-			       N:   base64.RawURLEncoding.EncodeToString(pub.N.Bytes()),
-			       E:   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(pub.E)).Bytes()),
-		       }
-		       jwks := jwks{Keys: []jwk{jwkKey}}
-		       c.Set("Content-Type", "application/json")
-		       return c.Status(fiber.StatusOK).JSON(jwks)
-	       }
+	return func(c *fiber.Ctx) error {
+		jwkKey := jwk{
+			Kty: "RSA",
+			Alg: "RS256",
+			Use: "sig",
+			Kid: kid,
+			N:   base64.RawURLEncoding.EncodeToString(pub.N.Bytes()),
+			E:   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(pub.E)).Bytes()),
+		}
+		jwks := jwks{Keys: []jwk{jwkKey}}
+		c.Set("Content-Type", "application/json")
+		return c.Status(fiber.StatusOK).JSON(jwks)
+	}
 }

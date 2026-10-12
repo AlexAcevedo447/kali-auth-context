@@ -106,7 +106,7 @@ func InitializeContainer() (*CoreContainer, error) {
 	idempotencyMW := middleware.NewIdempotencyMiddleware(idempotencyRepo)
 
 	jwtAuthMW := middleware.NewJWTAuthMiddleware(middleware.JWTAuthConfig{
-		Secret:    cfg.JWTSecret,
+		PublicKey: accessTokenIssuer.PublicKey(),
 		Issuer:    cfg.JWTIssuer,
 		Audience:  cfg.JWTAudience,
 		ClockSkew: 30 * time.Second,
@@ -210,46 +210,46 @@ func InitializeContainer() (*CoreContainer, error) {
 	getRolePermissionsHandler := rbachttpqueries.NewGetRolePermissionsHandler(rbacModule.Queries.GetRolePermissions)
 	getUserEffectivePermissionsHandler := rbachttpqueries.NewGetUserEffectivePermissionsHandler(rbacModule.Queries.GetUserEffectivePermissions)
 
-	       jwksHandler := security.NewJWKSHandler(accessTokenIssuer.PublicKey(), accessTokenIssuer.KeyID())
-	       httpModule := &HTTPModule{
-		       Router: routes.NewRouter(
-			       jwtAuthMW,
-			       idempotencyMW,
-			       loginHandler,
-			       authorizeHandler,
-			       createUserHandler,
-			       updateUserHandler,
-			       deleteUserHandler,
-			       getUserByIdHandler,
-			       getUserByEmailHandler,
-			       listUsersHandler,
-			       createTenantHandler,
-			       updateTenantHandler,
-			       activateTenantHandler,
-			       suspendTenantHandler,
-			       getTenantByIdHandler,
-			       getTenantByNameHandler,
-			       listTenantsHandler,
-			       createRoleHandler,
-			       updateRoleHandler,
-			       deleteRoleHandler,
-			       createPermissionHandler,
-			       updatePermissionHandler,
-			       deletePermissionHandler,
-			       assignRoleToUserHandler,
-			       removeRoleFromUserHandler,
-			       assignPermissionToRoleHandler,
-			       removePermissionFromRoleHandler,
-			       getRoleByIdHandler,
-			       listRolesHandler,
-			       getPermissionByIdHandler,
-			       listPermissionsHandler,
-			       getUserRolesHandler,
-			       getRolePermissionsHandler,
-			       getUserEffectivePermissionsHandler,
-			       jwksHandler,
-		       ),
-	       }
+	jwksHandler := security.NewJWKSHandler(accessTokenIssuer.PublicKey(), accessTokenIssuer.KeyID())
+	httpModule := &HTTPModule{
+		Router: routes.NewRouter(
+			jwtAuthMW,
+			idempotencyMW,
+			loginHandler,
+			authorizeHandler,
+			createUserHandler,
+			updateUserHandler,
+			deleteUserHandler,
+			getUserByIdHandler,
+			getUserByEmailHandler,
+			listUsersHandler,
+			createTenantHandler,
+			updateTenantHandler,
+			activateTenantHandler,
+			suspendTenantHandler,
+			getTenantByIdHandler,
+			getTenantByNameHandler,
+			listTenantsHandler,
+			createRoleHandler,
+			updateRoleHandler,
+			deleteRoleHandler,
+			createPermissionHandler,
+			updatePermissionHandler,
+			deletePermissionHandler,
+			assignRoleToUserHandler,
+			removeRoleFromUserHandler,
+			assignPermissionToRoleHandler,
+			removePermissionFromRoleHandler,
+			getRoleByIdHandler,
+			listRolesHandler,
+			getPermissionByIdHandler,
+			listPermissionsHandler,
+			getUserRolesHandler,
+			getRolePermissionsHandler,
+			getUserEffectivePermissionsHandler,
+			jwksHandler,
+		),
+	}
 
 	return NewCoreContainer(cfg, database, securityModule, authModule, authorizationModule, httpModule, userModule, tenantModule, rbacModule), nil
 }

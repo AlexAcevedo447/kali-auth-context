@@ -56,7 +56,7 @@ type Router struct {
 	getUserRoles               *rbacqueries.GetUserRolesHandler
 	getRolePermissions         *rbacqueries.GetRolePermissionsHandler
 	getUserEffectivePermission *rbacqueries.GetUserEffectivePermissionsHandler
-	jwksHandler fiber.Handler
+	jwksHandler                fiber.Handler
 }
 
 func NewRouter(
@@ -130,9 +130,9 @@ func NewRouter(
 		listPermissions:            listPermissions,
 		getUserRoles:               getUserRoles,
 		getRolePermissions:         getRolePermissions,
-		       getUserEffectivePermission: getUserEffectivePermission,
-		       jwksHandler:                jwksHandler,
-	       }
+		getUserEffectivePermission: getUserEffectivePermission,
+		jwksHandler:                jwksHandler,
+	}
 }
 
 func (r *Router) Register(app *fiber.App) {
@@ -146,6 +146,9 @@ func (r *Router) Register(app *fiber.App) {
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	})
+
+	// Public key set (JWKS) for services that verify RS256 access tokens.
+	app.Get("/.well-known/jwks.json", r.jwksHandler)
 
 	api := app.Group("/api")
 	v1 := api.Group("/v1")

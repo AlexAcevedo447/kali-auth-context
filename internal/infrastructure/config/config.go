@@ -27,7 +27,6 @@ type Config struct {
 	// JWT
 	JWTIssuer                string
 	JWTAudience              string
-	JWTSecret                string
 	JWTAccessTokenTTLMinutes int
 	JWTPrivateKeyPath        string
 	JWTPublicKeyPath         string
@@ -66,7 +65,6 @@ func LoadConfig() *Config {
 
 		JWTIssuer:                os.Getenv("JWT_ISSUER"),
 		JWTAudience:              os.Getenv("JWT_AUDIENCE"),
-		JWTSecret:                os.Getenv("JWT_SECRET"),
 		JWTAccessTokenTTLMinutes: getEnvAsIntOrDefault("JWT_ACCESS_TOKEN_TTL_MINUTES", 60),
 		JWTPrivateKeyPath:        os.Getenv("JWT_PRIVATE_KEY_PATH"),
 		JWTPublicKeyPath:         os.Getenv("JWT_PUBLIC_KEY_PATH"),
