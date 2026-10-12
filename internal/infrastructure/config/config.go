@@ -29,6 +29,9 @@ type Config struct {
 	JWTAudience              string
 	JWTSecret                string
 	JWTAccessTokenTTLMinutes int
+	JWTPrivateKeyPath        string
+	JWTPublicKeyPath         string
+	JWTKeyID                 string
 
 	// Keycloak
 	KeycloakURL   string
@@ -65,6 +68,9 @@ func LoadConfig() *Config {
 		JWTAudience:              os.Getenv("JWT_AUDIENCE"),
 		JWTSecret:                os.Getenv("JWT_SECRET"),
 		JWTAccessTokenTTLMinutes: getEnvAsIntOrDefault("JWT_ACCESS_TOKEN_TTL_MINUTES", 60),
+		JWTPrivateKeyPath:        os.Getenv("JWT_PRIVATE_KEY_PATH"),
+		JWTPublicKeyPath:         os.Getenv("JWT_PUBLIC_KEY_PATH"),
+		JWTKeyID:                 os.Getenv("JWT_KEY_ID"),
 
 		KeycloakURL:   os.Getenv("KEYCLOAK_URL"),
 		KeycloakRealm: os.Getenv("KEYCLOAK_REALM"),
