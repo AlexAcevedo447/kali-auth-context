@@ -33,7 +33,7 @@ El middleware JWT está conectado de extremo a extremo:
 
 El middleware valida en cada request protegido:
 - Presencia de Authorization: Bearer header
-- Firma HS256
+- Firma RS256 contra la clave pública del issuer
 - Expiración (exp)
 - Emisor (iss)
 - Audiencia (aud)
@@ -50,7 +50,7 @@ Uso base en otro servicio:
 import "kali-auth-context/internal/infrastructure/http/middleware"
 
 protected := v1.Group("", middleware.NewJWTAuthMiddleware(middleware.JWTAuthConfig{
-    Secret:    container.Config.JWTSecret,
+    PublicKey: accessTokenIssuer.PublicKey(),
     Issuer:    container.Config.JWTIssuer,
     Audience:  container.Config.JWTAudience,
     ClockSkew: 30 * time.Second,
@@ -76,8 +76,8 @@ El middleware almacena datos normalizados en locals:
 - gRPC introspection: solo para rutas de alto riesgo donde quieras validación online obligatoria.
 
 ## Checklist de operación
-- JWT_SECRET robusto en producción (no usar "change-me-dev-secret").
-- Rotación de secreto o migración a firma asimétrica (RS256/ES256) en evolución.
+- Clave privada RSA (JWT_PRIVATE_KEY_PATH) protegida y fuera de control de versiones en producción.
+- Plan de rotación del par de claves RSA (JWT_PRIVATE_KEY_PATH/JWT_PUBLIC_KEY_PATH/JWT_KEY_ID).
 - TTL corto de access token (5-15 min recomendado).
 - Logs con subject y tenant para trazabilidad.
 - Rechazar tokens sin claims requeridos.

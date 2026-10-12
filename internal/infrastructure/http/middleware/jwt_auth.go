@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"crypto/rsa"
 	"strings"
 	"time"
 
@@ -9,13 +10,14 @@ import (
 )
 
 type JWTAuthConfig struct {
-	Secret    string
+	PublicKey *rsa.PublicKey
 	Issuer    string
 	Audience  string
 	ClockSkew time.Duration
 }
 
-// NewJWTAuthMiddleware validates Bearer JWT locally using HS256.
+// NewJWTAuthMiddleware validates Bearer JWT locally using RS256, verifying the
+// signature against the issuer's public key.
 // It stores normalized auth data in Fiber locals:
 // - auth.sub
 // - auth.tid
@@ -41,10 +43,10 @@ func NewJWTAuthMiddleware(cfg JWTAuthConfig) fiber.Handler {
 		tokenString := strings.TrimSpace(parts[1])
 
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
-			if token.Method != jwt.SigningMethodHS256 {
+			if token.Method != jwt.SigningMethodRS256 {
 				return nil, jwt.ErrTokenSignatureInvalid
 			}
-			return []byte(cfg.Secret), nil
+			return cfg.PublicKey, nil
 		},
 			jwt.WithLeeway(clockSkew),
 		)

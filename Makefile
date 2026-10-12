@@ -7,8 +7,12 @@ DOCKER_COMPOSE_PROD=docker-compose.prod.yml
 
 # ----------- Docker (Desarrollo) -----------
 
+.PHONY: jwt-keys-dev
+jwt-keys-dev:
+	./scripts/generate-jwt-keys.sh
+
 .PHONY: docker-up-dev
-docker-up-dev:
+docker-up-dev: jwt-keys-dev
 	docker compose -f $(DOCKER_COMPOSE_DEV) up -d --build
 
 .PHONY: docker-down-dev
@@ -74,6 +78,7 @@ clean:
 .PHONY: help
 help:
 	@echo "Comandos útiles para Kali Auth Context:"
+	@echo "  make jwt-keys-dev       # Genera el par de claves RSA de JWT para dev (si no existen)"
 	@echo "  make docker-up-dev      # Levanta entorno dev en Docker (con build)"
 	@echo "  make docker-down-dev    # Detiene entorno dev en Docker"
 	@echo "  make docker-logs-dev    # Logs de entorno dev en Docker"
