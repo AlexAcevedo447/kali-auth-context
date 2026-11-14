@@ -115,7 +115,7 @@ func InitializeContainer() (*CoreContainer, error) {
 	securityModule := NewSecurityModule(uuidProvider, passwordHasher)
 
 	authModule := NewAuthModule(
-		authcommands.NewLoginCommand(getUserByEmailRepo, getUserRolesRepo, getRoleByIdRepo, getRolePermissionsRepo, getPermissionByIdRepo, passwordHasher),
+		authcommands.NewLoginCommand(userqryrepo.NewFindLoginCandidatesQueryRepository(database), getUserRolesRepo, getRoleByIdRepo, getRolePermissionsRepo, getPermissionByIdRepo, passwordHasher),
 	)
 
 	authorizationModule := NewAuthorizationModule(
@@ -248,7 +248,7 @@ func InitializeContainer() (*CoreContainer, error) {
 			getRolePermissionsHandler,
 			getUserEffectivePermissionsHandler,
 			jwksHandler,
-		),
+		).WithTenantGuards(middleware.NewTenantGuards(database, cfg.SeedMasterTenantID)),
 	}
 
 	return NewCoreContainer(cfg, database, securityModule, authModule, authorizationModule, httpModule, userModule, tenantModule, rbacModule), nil

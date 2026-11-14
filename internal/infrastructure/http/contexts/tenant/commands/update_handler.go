@@ -19,6 +19,7 @@ func NewUpdateHandler(command *tenantcommands.UpdateTenantCommand) *UpdateHandle
 func (h *UpdateHandler) Handle(c *fiber.Ctx) error {
 	var req struct {
 		Name   string `json:"name"`
+		Code   string `json:"code"`
 		Status string `json:"status"`
 	}
 	if err := c.BodyParser(&req); err != nil {
@@ -28,6 +29,7 @@ func (h *UpdateHandler) Handle(c *fiber.Ctx) error {
 	err := h.command.Execute(c.UserContext(), &tenantcommands.UpdateTenantDto{
 		Id:     identity.TenantId(c.Params("tenantId")),
 		Name:   req.Name,
+		Code:   req.Code,
 		Status: identity.TenantStatus(req.Status),
 	})
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 type UpdateTenantDto struct {
 	Id     identity.TenantId
 	Name   string
+	Code   string
 	Status identity.TenantStatus
 }
 
@@ -25,6 +26,13 @@ func (c *UpdateTenantCommand) Execute(ctx context.Context, dto *UpdateTenantDto)
 	tenant, err := identity.NewTenant(dto.Id, dto.Name)
 	if err != nil {
 		return err
+	}
+
+	if dto.Code != "" {
+		if err := identity.ValidateTenantCode(dto.Code); err != nil {
+			return err
+		}
+		tenant.Code = dto.Code
 	}
 
 	if dto.Status == identity.TenantStatusSuspended {

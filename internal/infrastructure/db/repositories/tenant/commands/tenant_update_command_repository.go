@@ -22,10 +22,14 @@ func NewUpdateTenantCommandRepository(db *bun.DB) *UpdateTenantCommandRepository
 
 func (r *UpdateTenantCommandRepository) Update(ctx context.Context, tenant *identity.Tenant) error {
 	model := mappers.ToTenantModel(tenant)
+	columns := []string{"name", "status"}
+	if model.Code != "" {
+		columns = append(columns, "code")
+	}
 	_, err := r.db.NewUpdate().
 		Model(model).
-		Column("name", "status").
+		Column(columns...).
 		Where("id = ?", model.Id).
 		Exec(ctx)
-	return err
+	return translateTenantCodeConflict(err)
 }

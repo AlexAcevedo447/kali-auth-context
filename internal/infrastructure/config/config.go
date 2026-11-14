@@ -40,6 +40,7 @@ type Config struct {
 	SeedMasterEnabled              bool
 	SeedMasterTenantID             string
 	SeedMasterTenantName           string
+	SeedMasterTenantCode           string
 	SeedMasterUserID               string
 	SeedMasterIdentificationNumber string
 	SeedMasterUsername             string
@@ -76,6 +77,7 @@ func LoadConfig() *Config {
 		SeedMasterEnabled:              getEnvAsBoolOrDefault("SEED_MASTER_ENABLED", false),
 		SeedMasterTenantID:             getEnvOrDefault("SEED_MASTER_TENANT_ID", "master-tenant"),
 		SeedMasterTenantName:           getEnvOrDefault("SEED_MASTER_TENANT_NAME", "Master Tenant"),
+		SeedMasterTenantCode:           getEnvOrDefault("SEED_MASTER_TENANT_CODE", "master"),
 		SeedMasterUserID:               getEnvOrDefault("SEED_MASTER_USER_ID", "master-user"),
 		SeedMasterIdentificationNumber: getEnvOrDefault("SEED_MASTER_IDENTIFICATION_NUMBER", "1000000000"),
 		SeedMasterUsername:             getEnvOrDefault("SEED_MASTER_USERNAME", "master"),

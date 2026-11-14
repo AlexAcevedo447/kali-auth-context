@@ -2,9 +2,11 @@ package db
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/uptrace/bun"
 
+	"kali-auth-context/internal/domain/identity"
 	"kali-auth-context/internal/infrastructure/db/models"
 )
 
@@ -51,5 +53,48 @@ func (m *Migrator) Migrate(ctx context.Context) error {
 		return err
 	}
 
+	// Código legible de empresa: columna, valores para tenants existentes e índice único.
+	if _, err := m.db.ExecContext(ctx, "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS code VARCHAR"); err != nil {
+		return err
+	}
+	if err := m.backfillTenantCodes(ctx); err != nil {
+		return err
+	}
+	if _, err := m.db.ExecContext(ctx, "CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_code_unique ON tenants (code)"); err != nil {
+		return err
+	}
+
+	// El login resuelve el tenant a partir del correo.
+	if _, err := m.db.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS idx_users_email ON user_models (email)"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// backfillTenantCodes asigna un código legible (derivado del nombre) a los
+// tenants que aún no lo tienen, evitando colisiones con un sufijo numérico.
+func (m *Migrator) backfillTenantCodes(ctx context.Context) error {
+	var pending []models.TenantModel
+	if err := m.db.NewSelect().Model(&pending).Where("code IS NULL OR code = ''").OrderExpr("id").Scan(ctx); err != nil {
+		return err
+	}
+	for _, t := range pending {
+		base := identity.SlugifyTenantCode(t.Name)
+		code := base
+		for n := 2; ; n++ {
+			exists, err := m.db.NewSelect().Model((*models.TenantModel)(nil)).Where("code = ?", code).Exists(ctx)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				break
+			}
+			code = fmt.Sprintf("%s-%d", base, n)
+		}
+		if _, err := m.db.NewUpdate().Model((*models.TenantModel)(nil)).Set("code = ?", code).Where("id = ?", t.Id).Exec(ctx); err != nil {
+			return err
+		}
+	}
 	return nil
 }

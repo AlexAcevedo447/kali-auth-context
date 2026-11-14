@@ -23,6 +23,14 @@ func WriteError(c *fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	if errors.Is(err, identity.ErrTenantCodeRequired) || errors.Is(err, identity.ErrTenantCodeTaken) {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	if errors.Is(err, identity.ErrTenantSuspended) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
+
 	if errors.Is(err, identity.ErrEmailAlreadyExists) {
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -36,6 +44,7 @@ func WriteError(c *fiber.Ctx, err error) error {
 
 func isValidationError(err error) bool {
 	return errors.Is(err, identity.ErrTenantRequired) ||
+		errors.Is(err, identity.ErrTenantCodeInvalid) ||
 		errors.Is(err, identity.ErrTenantNameRequired) ||
 		errors.Is(err, identity.ErrUserIdRequired) ||
 		errors.Is(err, identity.ErrRoleIdRequired) ||

@@ -90,6 +90,7 @@ func (s *MasterSeeder) ensureTenant(ctx context.Context, tx bun.Tx) error {
 		Model(&models.TenantModel{
 			Id:     s.cfg.SeedMasterTenantID,
 			Name:   s.cfg.SeedMasterTenantName,
+			Code:   s.cfg.SeedMasterTenantCode,
 			Status: "ACTIVE",
 		}).
 		Exec(ctx)

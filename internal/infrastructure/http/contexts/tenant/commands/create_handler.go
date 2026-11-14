@@ -18,15 +18,16 @@ func NewCreateHandler(command *tenantcommands.CreateTenantCommand) *CreateHandle
 func (h *CreateHandler) Handle(c *fiber.Ctx) error {
 	var req struct {
 		Name string `json:"name"`
+		Code string `json:"code"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
 
-	err := h.command.Execute(c.UserContext(), &tenantcommands.CreateTenantDto{Name: req.Name})
+	tenant, err := h.command.Execute(c.UserContext(), &tenantcommands.CreateTenantDto{Name: req.Name, Code: req.Code})
 	if err != nil {
 		return shared.WriteError(c, err)
 	}
 
-	return c.SendStatus(fiber.StatusCreated)
+	return c.Status(fiber.StatusCreated).JSON(tenant)
 }

@@ -2,21 +2,24 @@ package commands
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 
 	"kali-auth-context/internal/domain/identity"
 	"kali-auth-context/internal/ports"
 )
 
+// LoginDto son los datos que escribe una persona: correo y contraseña. El código
+// de empresa solo se envía cuando el servidor lo pide (cuentas en varias empresas).
+// El tenant nunca llega del cliente: se resuelve a partir de la cuenta.
 type LoginDto struct {
-	TenantId identity.TenantId
-	Email    string
-	Password string
+	Email      string
+	Password   string
+	TenantCode string
 }
 
 type AuthenticatedUser struct {
 	TenantId    identity.TenantId
+	TenantName  string
+	TenantCode  string
 	UserId      identity.UserId
 	Email       string
 	NeedsRehash bool
@@ -24,33 +27,32 @@ type AuthenticatedUser struct {
 	Permissions []*identity.Permission
 }
 
-// Caso de uso para el inicio de sesión (login) de usuarios.
-// Se encarga de validar las credenciales, obtener roles y permisos, y devolver el usuario autenticado.
 type LoginCommand struct {
-	userQueryRepo           ports.IGetUserByEmailQueryRepository
-	userRolesRepo           ports.IGetUserRolesQueryRepository
-	roleByIdRepo            ports.IGetRoleByIdQueryRepository
-	rolePermissionsRepo     ports.IGetRolePermissionsQueryRepository
-	permissionQueryRepo     ports.IGetPermissionByIdQueryRepository
-	hasher                  ports.IPasswordHasher
-	fakeHash                string
+	candidatesRepo      ports.IFindLoginCandidatesQueryRepository
+	userRolesRepo       ports.IGetUserRolesQueryRepository
+	roleByIdRepo        ports.IGetRoleByIdQueryRepository
+	rolePermissionsRepo ports.IGetRolePermissionsQueryRepository
+	permissionQueryRepo ports.IGetPermissionByIdQueryRepository
+	hasher              ports.IPasswordHasher
+	fakeHash            string
 }
 
 func NewLoginCommand(
-	userQueryRepo ports.IGetUserByEmailQueryRepository,
+	candidatesRepo ports.IFindLoginCandidatesQueryRepository,
 	userRolesRepo ports.IGetUserRolesQueryRepository,
 	roleByIdRepo ports.IGetRoleByIdQueryRepository,
 	rolePermissionsRepo ports.IGetRolePermissionsQueryRepository,
 	permissionQueryRepo ports.IGetPermissionByIdQueryRepository,
 	hasher ports.IPasswordHasher,
 ) *LoginCommand {
+	// Hash ficticio para igualar tiempos cuando el correo no existe.
 	fakeHash, err := hasher.Hash("fake-password-for-timing-equalization")
 	if err != nil {
 		fakeHash = "$2a$10$7EqJtq98hPqEX7fNZaFWoOe6j6M1Kf3r5L6N8A1sC3yRyvE4s46aW"
 	}
 
 	return &LoginCommand{
-		userQueryRepo:       userQueryRepo,
+		candidatesRepo:      candidatesRepo,
 		userRolesRepo:       userRolesRepo,
 		roleByIdRepo:        roleByIdRepo,
 		rolePermissionsRepo: rolePermissionsRepo,
@@ -60,86 +62,97 @@ func NewLoginCommand(
 	}
 }
 
-// Ejecuta el proceso de autenticación:
-// 1. Valida que los datos no estén vacíos.
-// 2. Busca el usuario por email y tenant.
-// 3. Si el usuario no existe o la contraseña es incorrecta, retorna error de autenticación.
-// 4. Si la autenticación es correcta, obtiene roles y permisos asociados.
-// 5. Devuelve el usuario autenticado con sus datos, roles y permisos.
 func (c *LoginCommand) Execute(dto *LoginDto) (*AuthenticatedUser, error) {
-       if dto == nil || dto.TenantId == "" || dto.Email == "" || dto.Password == "" {
-	       // Si faltan datos, retorna error de credenciales inválidas.
-	       return nil, identity.ErrInvalidCredentials
-       }
+	if dto == nil || dto.Email == "" || dto.Password == "" {
+		return nil, identity.ErrInvalidCredentials
+	}
 
-       // Busca el usuario por email y tenant.
-       user, err := c.userQueryRepo.GetByEmail(dto.TenantId, dto.Email)
-       if err != nil {
-	       if errors.Is(err, sql.ErrNoRows) {
-		       // Si el usuario no existe, simula comparación para evitar timing attacks y retorna error.
-		       _ = c.hasher.Compare(c.fakeHash, dto.Password)
-		       return nil, identity.ErrInvalidCredentials
-	       }
-	       return nil, err
-       }
+	ctx := context.Background()
 
-       // Compara la contraseña recibida con el hash almacenado.
-       if err := c.hasher.Compare(user.Password, dto.Password); err != nil {
-	       // Si la contraseña es incorrecta, retorna error de autenticación.
-	       return nil, identity.ErrInvalidCredentials
-       }
+	candidates, err := c.candidatesRepo.FindByEmail(ctx, dto.Email, dto.TenantCode)
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 {
+		_ = c.hasher.Compare(c.fakeHash, dto.Password)
+		return nil, identity.ErrInvalidCredentials
+	}
 
-       ctx := context.Background()
+	// El tenant se resuelve por la cuenta cuya contraseña coincide. Si coinciden
+	// cuentas de varias empresas, se pide el código de empresa (nunca el UUID).
+	matches := make([]ports.LoginCandidate, 0, 1)
+	for _, candidate := range candidates {
+		if err := c.hasher.Compare(candidate.User.Password, dto.Password); err == nil {
+			matches = append(matches, candidate)
+		}
+	}
+	switch {
+	case len(matches) == 0:
+		return nil, identity.ErrInvalidCredentials
+	case len(matches) > 1:
+		return nil, identity.ErrTenantCodeRequired
+	}
 
-       // Obtiene los roles del usuario.
-       userRoles, err := c.userRolesRepo.GetByUser(ctx, dto.TenantId, user.Id)
-       if err != nil {
-	       return nil, err
-       }
+	match := matches[0]
+	if match.TenantStatus != identity.TenantStatusActive {
+		return nil, identity.ErrTenantSuspended
+	}
+	user := match.User
 
-       roles := make([]*identity.Role, 0, len(userRoles))
-       permissionsByID := make(map[identity.PermissionId]*identity.Permission)
+	userRoles, err := c.userRolesRepo.GetByUser(ctx, user.TenantId, user.Id)
+	if err != nil {
+		return nil, err
+	}
 
-       // Por cada rol, obtiene los permisos asociados.
-       for _, userRole := range userRoles {
-	       role, err := c.roleByIdRepo.GetById(ctx, userRole.RoleId)
-	       if err != nil {
-		       return nil, err
-	       }
-	       roles = append(roles, role)
+	roles := make([]*identity.Role, 0, len(userRoles))
+	permissionsByID := make(map[identity.PermissionId]*identity.Permission)
 
-	       rolePerms, err := c.rolePermissionsRepo.GetByRole(ctx, dto.TenantId, userRole.RoleId)
-	       if err != nil {
-		       return nil, err
-	       }
+	for _, userRole := range userRoles {
+		role, err := c.roleByIdRepo.GetById(ctx, userRole.RoleId)
+		if err != nil {
+			return nil, err
+		}
+		// Defensa en profundidad: un rol de otra empresa nunca concede acceso.
+		if role.TenantId != user.TenantId {
+			continue
+		}
+		roles = append(roles, role)
 
-	       for _, rolePerm := range rolePerms {
-		       if _, exists := permissionsByID[rolePerm.PermissionId]; exists {
-			       continue
-		       }
+		rolePerms, err := c.rolePermissionsRepo.GetByRole(ctx, user.TenantId, userRole.RoleId)
+		if err != nil {
+			return nil, err
+		}
 
-		       perm, err := c.permissionQueryRepo.GetById(ctx, rolePerm.PermissionId)
-		       if err != nil {
-			       return nil, err
-		       }
+		for _, rolePerm := range rolePerms {
+			if _, exists := permissionsByID[rolePerm.PermissionId]; exists {
+				continue
+			}
 
-		       permissionsByID[rolePerm.PermissionId] = perm
-	       }
-       }
+			perm, err := c.permissionQueryRepo.GetById(ctx, rolePerm.PermissionId)
+			if err != nil {
+				return nil, err
+			}
+			if perm.TenantId != user.TenantId {
+				continue
+			}
 
-       // Prepara la lista de permisos únicos.
-       permissions := make([]*identity.Permission, 0, len(permissionsByID))
-       for _, perm := range permissionsByID {
-	       permissions = append(permissions, perm)
-       }
+			permissionsByID[rolePerm.PermissionId] = perm
+		}
+	}
 
-       // Devuelve el usuario autenticado con roles y permisos.
-       return &AuthenticatedUser{
-	       TenantId:    user.TenantId,
-	       UserId:      user.Id,
-	       Email:       user.Email,
-	       NeedsRehash: c.hasher.NeedsRehash(user.Password),
-	       Roles:       roles,
-	       Permissions: permissions,
-       }, nil
+	permissions := make([]*identity.Permission, 0, len(permissionsByID))
+	for _, perm := range permissionsByID {
+		permissions = append(permissions, perm)
+	}
+
+	return &AuthenticatedUser{
+		TenantId:    user.TenantId,
+		TenantName:  match.TenantName,
+		TenantCode:  match.TenantCode,
+		UserId:      user.Id,
+		Email:       user.Email,
+		NeedsRehash: c.hasher.NeedsRehash(user.Password),
+		Roles:       roles,
+		Permissions: permissions,
+	}, nil
 }

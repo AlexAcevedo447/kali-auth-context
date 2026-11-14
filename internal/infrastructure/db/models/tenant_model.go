@@ -7,5 +7,6 @@ type TenantModel struct {
 
 	Id     string `bun:"id,pk"`
 	Name   string `bun:"name,notnull"`
+	Code   string `bun:"code,nullzero"`
 	Status string `bun:"status,notnull"`
 }

@@ -10,6 +10,8 @@ import (
 	usercommands "kali-auth-context/internal/infrastructure/http/contexts/user/commands"
 	userqueries "kali-auth-context/internal/infrastructure/http/contexts/user/queries"
 
+	"kali-auth-context/internal/infrastructure/http/middleware"
+
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -57,6 +59,13 @@ type Router struct {
 	getRolePermissions         *rbacqueries.GetRolePermissionsHandler
 	getUserEffectivePermission *rbacqueries.GetUserEffectivePermissionsHandler
 	jwksHandler                fiber.Handler
+	guards                     *middleware.TenantGuards
+}
+
+// WithTenantGuards activa el aislamiento multi-tenant en las rutas protegidas.
+func (r *Router) WithTenantGuards(guards *middleware.TenantGuards) *Router {
+	r.guards = guards
+	return r
 }
 
 func NewRouter(
@@ -157,18 +166,28 @@ func (r *Router) Register(app *fiber.App) {
 	v1.Post("/auth/login", r.login.Handle)
 
 	// Protected endpoints (JWT required)
-	protected := v1.Group("", r.jwtAuth)
+	// Todas las rutas protegidas operan en el tenant del token (ver TenantGuards).
+	protected := v1.Group("", r.jwtAuth, r.guards.Scope())
+	ownedUser := middleware.OwnedRef{Source: "param", Field: "userId", Table: "user_models"}
+	ownedRole := middleware.OwnedRef{Source: "param", Field: "roleId", Table: "roles"}
+	ownedPermission := middleware.OwnedRef{Source: "param", Field: "permissionId", Table: "permissions"}
+	bodyUser := middleware.OwnedRef{Source: "body", Field: "user_id", Table: "user_models"}
+	bodyRole := middleware.OwnedRef{Source: "body", Field: "role_id", Table: "roles"}
+	bodyPermission := middleware.OwnedRef{Source: "body", Field: "permission_id", Table: "permissions"}
+	queryUser := middleware.OwnedRef{Source: "query", Field: "user_id", Table: "user_models"}
+	queryRole := middleware.OwnedRef{Source: "query", Field: "role_id", Table: "roles"}
 	protected.Post("/auth/authorize", r.authorize.Handle)
 
 	users := protected.Group("/users")
 	users.Post("/", r.idempotency, r.createUser.Handle)
 	users.Get("/by-email", r.getUserByEmail.Handle)
 	users.Get("/", r.listUsers.Handle)
-	users.Put("/:userId", r.idempotency, r.updateUser.Handle)
-	users.Delete("/:userId", r.idempotency, r.deleteUser.Handle)
-	users.Get("/:userId", r.getUserById.Handle)
+	users.Put("/:userId", r.guards.Owned(ownedUser), r.idempotency, r.updateUser.Handle)
+	users.Delete("/:userId", r.guards.Owned(ownedUser), r.idempotency, r.deleteUser.Handle)
+	users.Get("/:userId", r.guards.Owned(ownedUser), r.getUserById.Handle)
 
-	tenants := protected.Group("/tenants")
+	// Administración de empresas: solo el tenant de plataforma.
+	tenants := protected.Group("/tenants", r.guards.PlatformOnly())
 	tenants.Post("/", r.idempotency, r.createTenant.Handle)
 	tenants.Get("/by-name", r.getTenantByName.Handle)
 	tenants.Get("/", r.listTenants.Handle)
@@ -180,23 +199,25 @@ func (r *Router) Register(app *fiber.App) {
 	roles := protected.Group("/roles")
 	roles.Post("/", r.idempotency, r.createRole.Handle)
 	roles.Get("/", r.listRoles.Handle)
-	roles.Put("/:roleId", r.idempotency, r.updateRole.Handle)
-	roles.Delete("/:roleId", r.idempotency, r.deleteRole.Handle)
-	roles.Get("/:roleId", r.getRoleById.Handle)
+	roles.Put("/:roleId", r.guards.Owned(ownedRole), r.idempotency, r.updateRole.Handle)
+	roles.Delete("/:roleId", r.guards.Owned(ownedRole), r.idempotency, r.deleteRole.Handle)
+	roles.Get("/:roleId", r.guards.Owned(ownedRole), r.getRoleById.Handle)
 
 	permissions := protected.Group("/permissions")
 	permissions.Post("/", r.idempotency, r.createPermission.Handle)
 	permissions.Get("/", r.listPermissions.Handle)
-	permissions.Put("/:permissionId", r.idempotency, r.updatePermission.Handle)
-	permissions.Delete("/:permissionId", r.idempotency, r.deletePermission.Handle)
-	permissions.Get("/:permissionId", r.getPermissionById.Handle)
+	permissions.Put("/:permissionId", r.guards.Owned(ownedPermission), r.idempotency, r.updatePermission.Handle)
+	permissions.Delete("/:permissionId", r.guards.Owned(ownedPermission), r.idempotency, r.deletePermission.Handle)
+	permissions.Get("/:permissionId", r.guards.Owned(ownedPermission), r.getPermissionById.Handle)
 
 	rbac := protected.Group("/rbac")
-	rbac.Post("/users/roles/assign", r.idempotency, r.assignRoleToUser.Handle)
-	rbac.Post("/users/roles/remove", r.removeRoleFromUser.Handle)
-	rbac.Post("/roles/permissions/assign", r.idempotency, r.assignPermissionToRole.Handle)
-	rbac.Post("/roles/permissions/remove", r.removePermissionFromRole.Handle)
-	rbac.Get("/users/roles", r.getUserRoles.Handle)
-	rbac.Get("/roles/permissions", r.getRolePermissions.Handle)
-	rbac.Get("/users/effective-permissions", r.getUserEffectivePermission.Handle)
+	// Usuario, rol y permiso deben ser del mismo tenant: no se puede asignar un
+	// rol de la empresa A a un usuario de la empresa B.
+	rbac.Post("/users/roles/assign", r.guards.Owned(bodyUser, bodyRole), r.idempotency, r.assignRoleToUser.Handle)
+	rbac.Post("/users/roles/remove", r.guards.Owned(bodyUser, bodyRole), r.removeRoleFromUser.Handle)
+	rbac.Post("/roles/permissions/assign", r.guards.Owned(bodyRole, bodyPermission), r.idempotency, r.assignPermissionToRole.Handle)
+	rbac.Post("/roles/permissions/remove", r.guards.Owned(bodyRole, bodyPermission), r.removePermissionFromRole.Handle)
+	rbac.Get("/users/roles", r.guards.Owned(queryUser), r.getUserRoles.Handle)
+	rbac.Get("/roles/permissions", r.guards.Owned(queryRole), r.getRolePermissions.Handle)
+	rbac.Get("/users/effective-permissions", r.guards.Owned(queryUser), r.getUserEffectivePermission.Handle)
 }
