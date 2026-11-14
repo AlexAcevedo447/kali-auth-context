@@ -86,6 +86,12 @@ Microservicio de identidad para un ERP modular. Hoy cubre autenticación, autori
   rol `admin` y permiso `*/*` sembrados protegidos (409); ninguna operación deja a la empresa sin
   administrador efectivo (409); unicidad de roles y permisos e idempotencia de asignaciones; índices únicos
   creados al arrancar solo si los datos existentes lo permiten (si no, `WARN rbac integrity`).
+- Usuarios: `users/read` para consultar y `users/manage` para crear, editar y eliminar; las respuestas
+  nunca incluyen la contraseña ni su hash; editar o eliminar a otro usuario exige cubrir sus permisos;
+  nadie se elimina a sí mismo (`409 you cannot delete your own user`); `rbac/manage` permite consultar
+  roles, permissions y users para asignar; eliminar un usuario con roles → `409 user has roles assigned` (sin cascada) y nunca al último
+  administrador efectivo; `ActiveTenant` también exige que el usuario del token siga existiendo
+  (un usuario eliminado recibe `401 invalid access token`).
 - `GET /api/v1/auth/session` (protegido): 200 si el token es válido y su empresa está activa, con los
   permisos efectivos del usuario (`permissions`). `kali-invoice-service` lo consulta con el mismo token para bloquear empresas suspendidas.
 - Login mitiga enumeración con fake hash y soporta NeedsRehash

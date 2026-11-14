@@ -94,7 +94,8 @@
           "host": ["localhost"],
           "port": "18080",
           "path": ["api", "v1", "users", ""]
-        }
+        },
+        "description": "Requiere users/manage. 201 con el usuario creado (sin contraseña). tenant_id solo lo usa el administrador de plataforma para otra empresa; si se omite, se usa la del token. 400 correo vacío o contraseña débil; 409 correo duplicado en la empresa."
       }
     },
     {
@@ -114,7 +115,8 @@
             { "key": "email", "value": "usuario@correo.com" },
             { "key": "tenant_id", "value": "TENANT_ID" }
           ]
-        }
+        },
+        "description": "Requiere users/read. La respuesta nunca incluye la contraseña ni su hash."
       }
     },
     {
@@ -302,7 +304,7 @@
           "port": "18080",
           "path": ["api", "v1", "roles"]
         },
-        "description": "Requiere roles/read (manage incluye read). Empresa del token."
+        "description": "Requiere roles/read o rbac/manage (manage incluye read). Empresa del token."
       }
     },
     {
@@ -400,7 +402,7 @@
           "port": "18080",
           "path": ["api", "v1", "permissions"]
         },
-        "description": "Requiere permissions/read."
+        "description": "Requiere permissions/read o rbac/manage."
       }
     },
     {
@@ -611,6 +613,81 @@
           "query": [{ "key": "user_id", "value": "{{user_id}}" }]
         },
         "description": "Propio usuario: solo autenticación. Otro usuario: rbac/manage."
+      }
+    },
+    {
+      "name": "Usuarios: listar",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/users",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "users"]
+        },
+        "description": "Requiere users/read o rbac/manage (manage incluye read). Empresa del token. Sin contraseñas."
+      }
+    },
+    {
+      "name": "Usuarios: consultar",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/users/{{user_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "users", "{{user_id}}"]
+        },
+        "description": "El propio usuario: solo autenticación. Otro: users/read. 404 si no existe o es de otra empresa."
+      }
+    },
+    {
+      "name": "Usuarios: editar",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"identification_number\": \"1000000001\",\n  \"username\": \"usuario1\",\n  \"email\": \"usuario@correo.com\",\n  \"password\": \"\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/users/{{user_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "users", "{{user_id}}"]
+        },
+        "description": "Requiere users/manage. Contraseña opcional: vacía conserva la actual; si se indica, cumple la política. 409 correo duplicado. Editar o eliminar a OTRO usuario exige cubrir sus permisos efectivos (403 cannot manage a user with privileges you do not have)."
+      }
+    },
+    {
+      "name": "Usuarios: eliminar",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/users/{{user_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "users", "{{user_id}}"]
+        },
+        "description": "Requiere users/manage. 409 you cannot delete your own user (otro administrador puede hacerlo). 409 user has roles assigned (quitar antes sus roles); 409 operation would leave the tenant without an administrator. Editar o eliminar a OTRO usuario exige cubrir sus permisos efectivos (403 cannot manage a user with privileges you do not have). Sus tokens dejan de valer: auth de inmediato, facturación en ≤ 5 s."
       }
     }
   ],
