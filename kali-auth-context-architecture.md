@@ -80,8 +80,14 @@ Microservicio de identidad para un ERP modular. Hoy cubre autenticación, autori
     `409 platform tenant cannot be suspended`;
   - el login devuelve `is_platform_tenant` (true solo para `SEED_MASTER_TENANT_ID`), informativo
     para la interfaz; la autorización la aplica `PlatformAdmin`.
-- `GET /api/v1/auth/session` (protegido): 200 si el token es válido y su empresa está activa.
-  `kali-invoice-service` lo consulta con el mismo token para bloquear empresas suspendidas.
+- RBAC por operación (`middleware.RBACGuards`, contrato en `invoice-kali-front/docs/requisitos/MATRIZ_PERMISOS.md`):
+  `roles/read|manage`, `permissions/read|manage`, `rbac/manage`; `manage` incluye `read`; catálogo cerrado
+  (`GET /permissions/catalog`); no otorgar más de lo propio (`403 cannot grant privileges you do not have`);
+  rol `admin` y permiso `*/*` sembrados protegidos (409); ninguna operación deja a la empresa sin
+  administrador efectivo (409); unicidad de roles y permisos e idempotencia de asignaciones; índices únicos
+  creados al arrancar solo si los datos existentes lo permiten (si no, `WARN rbac integrity`).
+- `GET /api/v1/auth/session` (protegido): 200 si el token es válido y su empresa está activa, con los
+  permisos efectivos del usuario (`permissions`). `kali-invoice-service` lo consulta con el mismo token para bloquear empresas suspendidas.
 - Login mitiga enumeración con fake hash y soporta NeedsRehash
 - Password policy exige mínimo 12 caracteres, mayúscula, minúscula, dígito, símbolo y sin espacios
 - Password hasher actual: Argon2id con compatibilidad de verificación para hashes bcrypt heredados

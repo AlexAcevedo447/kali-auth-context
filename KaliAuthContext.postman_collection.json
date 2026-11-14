@@ -270,10 +270,355 @@
         },
         "description": "Solo administrador de plataforma: usuario de la empresa de plataforma con el permiso tenants/manage (el admin sembrado lo tiene con */*). Cualquier otro usuario: 403 platform administrator required. Los tokens aún vigentes vuelven a funcionar; 404 si no existe."
       }
+    },
+    {
+      "name": "Permisos: catálogo",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/permissions/catalog",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "permissions", "catalog"]
+        },
+        "description": "Recursos y acciones válidos (MATRIZ_PERMISOS.md). Solo requiere autenticación."
+      }
+    },
+    {
+      "name": "Roles: listar",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/roles",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "roles"]
+        },
+        "description": "Requiere roles/read (manage incluye read). Empresa del token."
+      }
+    },
+    {
+      "name": "Roles: crear",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Cajero\",\n  \"description\": \"Atiende pagos\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/roles",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "roles"]
+        },
+        "description": "Requiere roles/manage. 201 con el rol creado. 400 nombre vacío; 409 role name already exists (sin distinguir mayúsculas ni espacios)."
+      }
+    },
+    {
+      "name": "Roles: consultar",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/roles/{{role_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "roles", "{{role_id}}"]
+        },
+        "description": "Requiere roles/read. 404 si no existe o es de otra empresa."
+      }
+    },
+    {
+      "name": "Roles: editar",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Cajero\",\n  \"description\": \"Atiende pagos y anulaciones\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/roles/{{role_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "roles", "{{role_id}}"]
+        },
+        "description": "Requiere roles/manage. 409 nombre repetido; 409 protected administrative role (rol admin sembrado)."
+      }
+    },
+    {
+      "name": "Roles: eliminar",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/roles/{{role_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "roles", "{{role_id}}"]
+        },
+        "description": "Requiere roles/manage. 409 role is assigned to users (quítalo primero de los usuarios); sin usuarios se elimina con sus vínculos de permisos. 409 protected administrative role."
+      }
+    },
+    {
+      "name": "Permisos: listar",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/permissions",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "permissions"]
+        },
+        "description": "Requiere permissions/read."
+      }
+    },
+    {
+      "name": "Permisos: crear",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"resource\": \"invoices\",\n  \"action\": \"read\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/permissions",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "permissions"]
+        },
+        "description": "Requiere permissions/manage. Se normaliza (minúsculas, sin espacios). 400 unknown permission resource/action; 409 permission already exists. Con comodín o tenants/manage: hay que cubrirlo (403)."
+      }
+    },
+    {
+      "name": "Permisos: editar",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"resource\": \"invoices\",\n  \"action\": \"manage\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/permissions/{{permission_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "permissions", "{{permission_id}}"]
+        },
+        "description": "Requiere permissions/manage. 409 permission is assigned to roles; 409 protected administrative permission (*/* de la plataforma)."
+      }
+    },
+    {
+      "name": "Permisos: eliminar",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/permissions/{{permission_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "permissions", "{{permission_id}}"]
+        },
+        "description": "Requiere permissions/manage. 409 permission is assigned to roles; 409 protected administrative permission."
+      }
+    },
+    {
+      "name": "Asignaciones: asignar rol a usuario",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"role_id\": \"{{role_id}}\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/rbac/users/roles/assign",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "rbac", "users", "roles", "assign"]
+        },
+        "description": "Requiere rbac/manage. Idempotente (200 sin duplicar). No escalar: quien opera debe cubrir con sus permisos lo que asigna o quita (403 cannot grant privileges you do not have)."
+      }
+    },
+    {
+      "name": "Asignaciones: quitar rol a usuario",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"role_id\": \"{{role_id}}\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/rbac/users/roles/remove",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "rbac", "users", "roles", "remove"]
+        },
+        "description": "Requiere rbac/manage. No escalar: quien opera debe cubrir con sus permisos lo que asigna o quita (403 cannot grant privileges you do not have). 409 operation would leave the tenant without an administrator."
+      }
+    },
+    {
+      "name": "Asignaciones: roles de un usuario",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/rbac/users/roles?user_id={{user_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "rbac", "users", "roles"],
+          "query": [{ "key": "user_id", "value": "{{user_id}}" }]
+        },
+        "description": "Propio usuario: solo autenticación. Otro usuario: rbac/manage. Devuelve vínculos {TenantId, UserId, RoleId}."
+      }
+    },
+    {
+      "name": "Asignaciones: asignar permiso a rol",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"role_id\": \"{{role_id}}\",\n  \"permission_id\": \"{{permission_id}}\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/rbac/roles/permissions/assign",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "rbac", "roles", "permissions", "assign"]
+        },
+        "description": "Requiere rbac/manage. Idempotente. No escalar: quien opera debe cubrir con sus permisos lo que asigna o quita (403 cannot grant privileges you do not have)."
+      }
+    },
+    {
+      "name": "Asignaciones: quitar permiso a rol",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"role_id\": \"{{role_id}}\",\n  \"permission_id\": \"{{permission_id}}\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/rbac/roles/permissions/remove",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "rbac", "roles", "permissions", "remove"]
+        },
+        "description": "Requiere rbac/manage. No escalar: quien opera debe cubrir con sus permisos lo que asigna o quita (403 cannot grant privileges you do not have). 409 protected administrative role; 409 operation would leave the tenant without an administrator."
+      }
+    },
+    {
+      "name": "Asignaciones: permisos de un rol",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/rbac/roles/permissions?role_id={{role_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "rbac", "roles", "permissions"],
+          "query": [{ "key": "role_id", "value": "{{role_id}}" }]
+        },
+        "description": "Requiere roles/read. Devuelve vínculos {TenantId, RoleId, PermissionId}."
+      }
+    },
+    {
+      "name": "Asignaciones: permisos efectivos de un usuario",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/rbac/users/effective-permissions?user_id={{user_id}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "rbac", "users", "effective-permissions"],
+          "query": [{ "key": "user_id", "value": "{{user_id}}" }]
+        },
+        "description": "Propio usuario: solo autenticación. Otro usuario: rbac/manage."
+      }
     }
   ],
   "variable": [
     { "key": "access_token", "value": "" },
-    { "key": "tenant_id_objetivo", "value": "" }
+    { "key": "tenant_id_objetivo", "value": "" },
+    { "key": "role_id", "value": "" },
+    { "key": "permission_id", "value": "" },
+    { "key": "user_id", "value": "" }
   ]
 }
