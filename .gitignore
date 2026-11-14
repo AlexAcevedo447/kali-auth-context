@@ -4,3 +4,7 @@
 .secrets/
 # Permitir scripts de healthcheck
 !scripts/pg-healthcheck.sh
+# Artefactos locales y binarios generados (no se versionan)
+.DS_Store
+*.exe
+tmp/
