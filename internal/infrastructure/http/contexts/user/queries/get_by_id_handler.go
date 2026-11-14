@@ -22,5 +22,5 @@ func (h *GetByIdHandler) Handle(c *fiber.Ctx) error {
 		return shared.WriteError(c, err)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(user)
+	return c.Status(fiber.StatusOK).JSON(shared.ToUserResponse(user))
 }
