@@ -39,5 +39,10 @@ Al arrancar:
 ## Pruebas
 
 ```bash
-go build ./... && go vet ./... && go test ./...
+go build -mod=mod ./... && go vet -mod=mod ./... && go test -mod=mod ./...   # o: make test
 ```
+
+Se usa `-mod=mod` (dependencias desde la caché de módulos, según `go.mod`/`go.sum`) porque, tras
+`docker compose ... up` (o `npm run stack:up` del front), Docker crea en el host la carpeta
+`vendor/` del montaje `- /app/vendor`; si esa carpeta queda vacía o desactualizada, Go usa
+`-mod=vendor` por defecto y falla con `inconsistent vendoring`. `-mod=mod` no modifica archivos.

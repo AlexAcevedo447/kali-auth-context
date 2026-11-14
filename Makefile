@@ -59,7 +59,7 @@ build:
 
 .PHONY: test
 test:
-	go test ./...
+	go test -mod=mod ./...
 
 .PHONY: tidy
 tidy:
