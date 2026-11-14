@@ -48,7 +48,23 @@ Microservicio de identidad para un ERP modular. Hoy cubre autenticación, autori
   - tenant activo
   - usuario perteneciente al tenant
   - permisos efectivos por roles
-- Login es tenant-aware
+- Login por correo y contraseña: el servidor resuelve el tenant de la cuenta. Si el
+  mismo correo y contraseña existen en varias empresas responde `409 company code required`
+  y el cliente reenvía `tenant_code` (código legible de empresa, nunca el UUID).
+  Un tenant suspendido responde `403 tenant is suspended`.
+- El JWT (RS256) lleva el tenant efectivo en el claim `tid`; los servicios lo validan con
+  el JWKS publicado en `/.well-known/jwks.json`. `JWT_ISSUER`/`JWT_AUDIENCE` son identificadores
+  lógicos y deben ser idénticos en este servicio y en `kali-invoice-service`
+  (valores unificados: `http://localhost:8080` y `account`).
+- Aislamiento multi-tenant (`middleware.TenantGuards`):
+  - el `tenant_id` de query/body se fija al del token; si el cliente envía otro → `403 tenant mismatch`;
+  - roles, permisos y usuarios referenciados por id (ruta, query o body) deben pertenecer al
+    tenant efectivo; si no → `404 resource not found` (no se revela que existen);
+  - no se puede asignar un rol de una empresa a un usuario de otra;
+  - `/api/v1/tenants` solo para el tenant de plataforma (`SEED_MASTER_TENANT_ID`), que además
+    puede indicar un tenant destino existente al crear usuarios/roles.
+- Tenant con `code` legible y único (`SEED_MASTER_TENANT_CODE` para el maestro; para los
+  existentes se deriva del nombre al migrar).
 - Login mitiga enumeración con fake hash y soporta NeedsRehash
 - Password policy exige mínimo 12 caracteres, mayúscula, minúscula, dígito, símbolo y sin espacios
 - Password hasher actual: Argon2id con compatibilidad de verificación para hashes bcrypt heredados

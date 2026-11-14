@@ -29,7 +29,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"tenant_id\": \"TENANT_ID\",\n  \"email\": \"usuario@correo.com\",\n  \"password\": \"contraseña123A!\"\n}"
+          "raw": "{\n  \"email\": \"usuario@correo.com\",\n  \"password\": \"contraseña123A!\"\n}"
         },
         "url": {
           "raw": "http://localhost:18080/api/v1/auth/login",
@@ -37,7 +37,44 @@
           "host": ["localhost"],
           "port": "18080",
           "path": ["api", "v1", "auth", "login"]
-        }
+        },
+        "description": "El tenant ya no se envía: el servidor lo resuelve a partir de la cuenta. Si el correo y la contraseña existen en varias empresas responde 409 {\"error\": \"company code required\"}; en ese caso usa la petición 'Login (con código de empresa)'."
+      }
+    },
+    {
+      "name": "Login (con código de empresa)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"usuario@correo.com\",\n  \"password\": \"contraseña123A!\",\n  \"tenant_code\": \"codigo-empresa\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/auth/login",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "auth", "login"]
+        },
+        "description": "Solo cuando el login sin código responde 409 company code required. tenant_code es el código legible de la empresa (3-40 minúsculas, dígitos o guiones), nunca el UUID."
+      }
+    },
+    {
+      "name": "JWKS (claves públicas)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:18080/.well-known/jwks.json",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": [".well-known", "jwks.json"]
+        },
+        "description": "Claves públicas RS256 que kali-invoice-service usa para validar los access tokens (AUTH_JWKS_URL)."
       }
     },
     {
