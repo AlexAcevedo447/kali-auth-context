@@ -21,8 +21,23 @@ func NewUpdatePermissionCommandRepository(db *bun.DB) *UpdatePermissionCommandRe
 }
 
 func (r *UpdatePermissionCommandRepository) Update(ctx context.Context, permission *identity.Permission) error {
+	// Editar un permiso asignado cambiaría los accesos de otros usuarios.
+	assigned, err := exists(ctx, r.db, "SELECT 1 FROM role_permissions WHERE permission_id = ?", string(permission.Id))
+	if err != nil {
+		return err
+	}
+	if assigned {
+		return identity.ErrPermissionAssigned
+	}
+	taken, err := permissionTaken(ctx, r.db, string(permission.TenantId), permission.Resource, permission.Action, string(permission.Id))
+	if err != nil {
+		return err
+	}
+	if taken {
+		return identity.ErrPermissionTaken
+	}
 	model := mappers.ToPermissionModel(permission)
-	_, err := r.db.NewUpdate().
+	_, err = r.db.NewUpdate().
 		Model(model).
 		Column("resource", "action").
 		Where("id = ?", model.Id).

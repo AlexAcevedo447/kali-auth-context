@@ -22,12 +22,15 @@ func NewCreateRoleCommand(repo ports.ICreateRoleCommandRepository, provider port
 	return &CreateRoleCommand{repo: repo, provider: provider}
 }
 
-func (c *CreateRoleCommand) Execute(ctx context.Context, dto *CreateRoleDto) error {
+func (c *CreateRoleCommand) Execute(ctx context.Context, dto *CreateRoleDto) (*identity.Role, error) {
 	roleId := identity.RoleId(c.provider.Generate())
 	role, err := identity.NewRole(roleId, dto.TenantId, dto.Name, dto.Description)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return c.repo.Create(ctx, role)
+	if err := c.repo.Create(ctx, role); err != nil {
+		return nil, err
+	}
+	return role, nil
 }

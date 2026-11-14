@@ -26,7 +26,7 @@ func (h *CreatePermissionHandler) Handle(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
 
-	err := h.command.Execute(c.UserContext(), &rbaccommands.CreatePermissionDto{
+	permission, err := h.command.Execute(c.UserContext(), &rbaccommands.CreatePermissionDto{
 		TenantId: identity.TenantId(req.TenantId),
 		Resource: req.Resource,
 		Action:   req.Action,
@@ -35,5 +35,5 @@ func (h *CreatePermissionHandler) Handle(c *fiber.Ctx) error {
 		return shared.WriteError(c, err)
 	}
 
-	return c.SendStatus(fiber.StatusCreated)
+	return c.Status(fiber.StatusCreated).JSON(permission)
 }

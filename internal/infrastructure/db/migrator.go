@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/uptrace/bun"
 
@@ -69,7 +70,66 @@ func (m *Migrator) Migrate(ctx context.Context) error {
 		return err
 	}
 
+	// Integridad RBAC (incremento 2): índices únicos solo si los datos existentes
+	// lo permiten. Nunca se borran ni fusionan datos aquí; si hay duplicados, el
+	// índice queda pendiente (la aplicación igual impide nuevos duplicados).
+	if _, err := m.EnsureRBACIntegrityIndexes(ctx); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// RBACIntegrityIndex describe una restricción de unicidad RBAC y cómo detectar
+// los datos que impiden crearla.
+type RBACIntegrityIndex struct {
+	Name       string
+	Create     string
+	Duplicates string
+}
+
+var RBACIntegrityIndexes = []RBACIntegrityIndex{
+	{
+		Name:       "idx_roles_tenant_name_unique",
+		Create:     "CREATE UNIQUE INDEX IF NOT EXISTS idx_roles_tenant_name_unique ON roles (tenant_id, lower(trim(name)))",
+		Duplicates: "SELECT count(*) FROM (SELECT 1 FROM roles GROUP BY tenant_id, lower(trim(name)) HAVING count(*) > 1) d",
+	},
+	{
+		Name:       "idx_permissions_tenant_resource_action_unique",
+		Create:     "CREATE UNIQUE INDEX IF NOT EXISTS idx_permissions_tenant_resource_action_unique ON permissions (tenant_id, lower(trim(resource)), lower(trim(action)))",
+		Duplicates: "SELECT count(*) FROM (SELECT 1 FROM permissions GROUP BY tenant_id, lower(trim(resource)), lower(trim(action)) HAVING count(*) > 1) d",
+	},
+	{
+		Name:       "idx_user_roles_unique",
+		Create:     "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_roles_unique ON user_roles (tenant_id, user_id, role_id)",
+		Duplicates: "SELECT count(*) FROM (SELECT 1 FROM user_roles GROUP BY tenant_id, user_id, role_id HAVING count(*) > 1) d",
+	},
+	{
+		Name:       "idx_role_permissions_unique",
+		Create:     "CREATE UNIQUE INDEX IF NOT EXISTS idx_role_permissions_unique ON role_permissions (tenant_id, role_id, permission_id)",
+		Duplicates: "SELECT count(*) FROM (SELECT 1 FROM role_permissions GROUP BY tenant_id, role_id, permission_id HAVING count(*) > 1) d",
+	},
+}
+
+// EnsureRBACIntegrityIndexes crea cada índice único si no hay duplicados y
+// devuelve los nombres de los que quedaron pendientes por datos existentes.
+func (m *Migrator) EnsureRBACIntegrityIndexes(ctx context.Context) ([]string, error) {
+	var pending []string
+	for _, idx := range RBACIntegrityIndexes {
+		var dups int
+		if err := m.db.NewRaw(idx.Duplicates).Scan(ctx, &dups); err != nil {
+			return nil, err
+		}
+		if dups > 0 {
+			log.Printf("WARN rbac integrity: %s pendiente, %d grupos duplicados (ver plan de migración en MATRIZ_PERMISOS.md)", idx.Name, dups)
+			pending = append(pending, idx.Name)
+			continue
+		}
+		if _, err := m.db.ExecContext(ctx, idx.Create); err != nil {
+			return nil, err
+		}
+	}
+	return pending, nil
 }
 
 // backfillTenantCodes asigna un código legible (derivado del nombre) a los

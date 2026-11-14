@@ -21,7 +21,14 @@ func NewDeletePermissionCommandRepository(db *bun.DB) *DeletePermissionCommandRe
 }
 
 func (r *DeletePermissionCommandRepository) Delete(ctx context.Context, permissionId identity.PermissionId) error {
-	_, err := r.db.NewDelete().
+	assigned, err := exists(ctx, r.db, "SELECT 1 FROM role_permissions WHERE permission_id = ?", string(permissionId))
+	if err != nil {
+		return err
+	}
+	if assigned {
+		return identity.ErrPermissionAssigned
+	}
+	_, err = r.db.NewDelete().
 		Model((*models.PermissionModel)(nil)).
 		Where("id = ?", string(permissionId)).
 		Exec(ctx)

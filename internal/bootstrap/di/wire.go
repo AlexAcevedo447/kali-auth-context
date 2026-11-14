@@ -269,7 +269,7 @@ func InitializeContainer() (*CoreContainer, error) {
 					}
 					return decision.Allowed, nil
 				}),
-		),
+		).WithRBACGuards(middleware.NewRBACGuards(database, cfg.SeedMasterTenantID)),
 	}
 
 	return NewCoreContainer(cfg, database, securityModule, authModule, authorizationModule, httpModule, userModule, tenantModule, rbacModule), nil

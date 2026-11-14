@@ -60,11 +60,18 @@ type Router struct {
 	getUserEffectivePermission *rbacqueries.GetUserEffectivePermissionsHandler
 	jwksHandler                fiber.Handler
 	guards                     *middleware.TenantGuards
+	rbacGuards                 *middleware.RBACGuards
 }
 
 // WithTenantGuards activa el aislamiento multi-tenant en las rutas protegidas.
 func (r *Router) WithTenantGuards(guards *middleware.TenantGuards) *Router {
 	r.guards = guards
+	return r
+}
+
+// WithRBACGuards activa la autorización por operación (MATRIZ_PERMISOS.md).
+func (r *Router) WithRBACGuards(guards *middleware.RBACGuards) *Router {
+	r.rbacGuards = guards
 	return r
 }
 
@@ -178,16 +185,13 @@ func (r *Router) Register(app *fiber.App) {
 	bodyPermission := middleware.OwnedRef{Source: "body", Field: "permission_id", Table: "permissions"}
 	queryUser := middleware.OwnedRef{Source: "query", Field: "user_id", Table: "user_models"}
 	queryRole := middleware.OwnedRef{Source: "query", Field: "role_id", Table: "roles"}
-	protected.Post("/auth/authorize", r.authorize.Handle)
+	rb := r.rbacGuards
+	// Evaluar los permisos propios no exige nada más; los de otro usuario, rbac/manage.
+	protected.Post("/auth/authorize", rb.SelfOr("body", "user_id", "rbac", "manage"), r.authorize.Handle)
 	// Comprobación de sesión para otros servicios (p. ej. facturación): responde 200
-	// solo si el token es válido y su empresa está activa (403 tenant is suspended).
-	protected.Get("/auth/session", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"tenant_id": c.Locals("auth.tid"),
-			"user_id":   c.Locals("auth.sub"),
-			"status":    "ACTIVE",
-		})
-	})
+	// solo si el token es válido y su empresa está activa (403 tenant is suspended),
+	// con los permisos efectivos del propio usuario.
+	protected.Get("/auth/session", rb.SessionHandler)
 
 	users := protected.Group("/users")
 	users.Post("/", r.idempotency, r.createUser.Handle)
@@ -208,27 +212,28 @@ func (r *Router) Register(app *fiber.App) {
 	tenants.Get("/:tenantId", r.getTenantById.Handle)
 
 	roles := protected.Group("/roles")
-	roles.Post("/", r.idempotency, r.createRole.Handle)
-	roles.Get("/", r.listRoles.Handle)
-	roles.Put("/:roleId", r.guards.Owned(ownedRole), r.idempotency, r.updateRole.Handle)
-	roles.Delete("/:roleId", r.guards.Owned(ownedRole), r.idempotency, r.deleteRole.Handle)
-	roles.Get("/:roleId", r.guards.Owned(ownedRole), r.getRoleById.Handle)
+	roles.Post("/", rb.Require("roles", "manage"), r.idempotency, r.createRole.Handle)
+	roles.Get("/", rb.Require("roles", "read"), r.listRoles.Handle)
+	roles.Put("/:roleId", r.guards.Owned(ownedRole), rb.Require("roles", "manage"), rb.ProtectSeedRole("param", "roleId"), r.idempotency, r.updateRole.Handle)
+	roles.Delete("/:roleId", r.guards.Owned(ownedRole), rb.Require("roles", "manage"), rb.ProtectSeedRole("param", "roleId"), r.idempotency, r.deleteRole.Handle)
+	roles.Get("/:roleId", r.guards.Owned(ownedRole), rb.Require("roles", "read"), r.getRoleById.Handle)
 
 	permissions := protected.Group("/permissions")
-	permissions.Post("/", r.idempotency, r.createPermission.Handle)
-	permissions.Get("/", r.listPermissions.Handle)
-	permissions.Put("/:permissionId", r.guards.Owned(ownedPermission), r.idempotency, r.updatePermission.Handle)
-	permissions.Delete("/:permissionId", r.guards.Owned(ownedPermission), r.idempotency, r.deletePermission.Handle)
-	permissions.Get("/:permissionId", r.guards.Owned(ownedPermission), r.getPermissionById.Handle)
+	permissions.Get("/catalog", middleware.CatalogHandler)
+	permissions.Post("/", rb.Require("permissions", "manage"), rb.NoEscalationPermissionWrite(), r.idempotency, r.createPermission.Handle)
+	permissions.Get("/", rb.Require("permissions", "read"), r.listPermissions.Handle)
+	permissions.Put("/:permissionId", r.guards.Owned(ownedPermission), rb.Require("permissions", "manage"), rb.ProtectSeedPermission("param", "permissionId"), rb.NoEscalationPermissionWrite(), r.idempotency, r.updatePermission.Handle)
+	permissions.Delete("/:permissionId", r.guards.Owned(ownedPermission), rb.Require("permissions", "manage"), rb.ProtectSeedPermission("param", "permissionId"), r.idempotency, r.deletePermission.Handle)
+	permissions.Get("/:permissionId", r.guards.Owned(ownedPermission), rb.Require("permissions", "read"), r.getPermissionById.Handle)
 
 	rbac := protected.Group("/rbac")
-	// Usuario, rol y permiso deben ser del mismo tenant: no se puede asignar un
-	// rol de la empresa A a un usuario de la empresa B.
-	rbac.Post("/users/roles/assign", r.guards.Owned(bodyUser, bodyRole), r.idempotency, r.assignRoleToUser.Handle)
-	rbac.Post("/users/roles/remove", r.guards.Owned(bodyUser, bodyRole), r.removeRoleFromUser.Handle)
-	rbac.Post("/roles/permissions/assign", r.guards.Owned(bodyRole, bodyPermission), r.idempotency, r.assignPermissionToRole.Handle)
-	rbac.Post("/roles/permissions/remove", r.guards.Owned(bodyRole, bodyPermission), r.removePermissionFromRole.Handle)
-	rbac.Get("/users/roles", r.guards.Owned(queryUser), r.getUserRoles.Handle)
-	rbac.Get("/roles/permissions", r.guards.Owned(queryRole), r.getRolePermissions.Handle)
-	rbac.Get("/users/effective-permissions", r.guards.Owned(queryUser), r.getUserEffectivePermission.Handle)
+	// Usuario, rol y permiso deben ser del mismo tenant (Owned); además rbac/manage,
+	// no escalar privilegios y no dejar la empresa sin administrador efectivo.
+	rbac.Post("/users/roles/assign", r.guards.Owned(bodyUser, bodyRole), rb.Require("rbac", "manage"), rb.NoEscalationUserRole(), r.idempotency, r.assignRoleToUser.Handle)
+	rbac.Post("/users/roles/remove", r.guards.Owned(bodyUser, bodyRole), rb.Require("rbac", "manage"), rb.NoEscalationUserRole(), rb.KeepAdministrator(middleware.ChangeRemoveUserRole), r.removeRoleFromUser.Handle)
+	rbac.Post("/roles/permissions/assign", r.guards.Owned(bodyRole, bodyPermission), rb.Require("rbac", "manage"), rb.NoEscalationRolePermission(), r.idempotency, r.assignPermissionToRole.Handle)
+	rbac.Post("/roles/permissions/remove", r.guards.Owned(bodyRole, bodyPermission), rb.Require("rbac", "manage"), rb.ProtectSeedRole("body", "role_id"), rb.NoEscalationRolePermission(), rb.KeepAdministrator(middleware.ChangeRemoveRolePermission), r.removePermissionFromRole.Handle)
+	rbac.Get("/users/roles", r.guards.Owned(queryUser), rb.SelfOr("query", "user_id", "rbac", "manage"), r.getUserRoles.Handle)
+	rbac.Get("/roles/permissions", r.guards.Owned(queryRole), rb.Require("roles", "read"), r.getRolePermissions.Handle)
+	rbac.Get("/users/effective-permissions", r.guards.Owned(queryUser), rb.SelfOr("query", "user_id", "rbac", "manage"), r.getUserEffectivePermission.Handle)
 }

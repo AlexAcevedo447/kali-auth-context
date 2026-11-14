@@ -21,7 +21,14 @@ func NewCreateRoleCommandRepository(db *bun.DB) *CreateRoleCommandRepository {
 }
 
 func (r *CreateRoleCommandRepository) Create(ctx context.Context, role *identity.Role) error {
+	taken, err := roleNameTaken(ctx, r.db, string(role.TenantId), role.Name, "")
+	if err != nil {
+		return err
+	}
+	if taken {
+		return identity.ErrRoleNameTaken
+	}
 	model := mappers.ToRoleModel(role)
-	_, err := r.db.NewInsert().Model(model).Exec(ctx)
+	_, err = r.db.NewInsert().Model(model).Exec(ctx)
 	return err
 }

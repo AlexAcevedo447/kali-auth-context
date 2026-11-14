@@ -21,8 +21,15 @@ func NewUpdateRoleCommandRepository(db *bun.DB) *UpdateRoleCommandRepository {
 }
 
 func (r *UpdateRoleCommandRepository) Update(ctx context.Context, role *identity.Role) error {
+	taken, err := roleNameTaken(ctx, r.db, string(role.TenantId), role.Name, string(role.Id))
+	if err != nil {
+		return err
+	}
+	if taken {
+		return identity.ErrRoleNameTaken
+	}
 	model := mappers.ToRoleModel(role)
-	_, err := r.db.NewUpdate().
+	_, err = r.db.NewUpdate().
 		Model(model).
 		Column("name", "description").
 		Where("id = ?", model.Id).

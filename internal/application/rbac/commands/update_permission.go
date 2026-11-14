@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"kali-auth-context/internal/domain/policies"
 
 	"kali-auth-context/internal/domain/identity"
 	"kali-auth-context/internal/ports"
@@ -23,7 +24,11 @@ func NewUpdatePermissionCommand(repo ports.IUpdatePermissionCommandRepository) *
 }
 
 func (c *UpdatePermissionCommand) Execute(ctx context.Context, dto *UpdatePermissionDto) error {
-	permission, err := identity.NewPermission(dto.Id, dto.TenantId, dto.Resource, dto.Action)
+	resource, action, err := policies.ValidatePermission(dto.Resource, dto.Action)
+	if err != nil {
+		return err
+	}
+	permission, err := identity.NewPermission(dto.Id, dto.TenantId, resource, action)
 	if err != nil {
 		return err
 	}

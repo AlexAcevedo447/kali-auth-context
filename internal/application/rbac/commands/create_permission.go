@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"kali-auth-context/internal/domain/policies"
 
 	"kali-auth-context/internal/domain/identity"
 	"kali-auth-context/internal/ports"
@@ -22,12 +23,20 @@ func NewCreatePermissionCommand(repo ports.ICreatePermissionCommandRepository, p
 	return &CreatePermissionCommand{repo: repo, provider: provider}
 }
 
-func (c *CreatePermissionCommand) Execute(ctx context.Context, dto *CreatePermissionDto) error {
-	permissionId := identity.PermissionId(c.provider.Generate())
-	permission, err := identity.NewPermission(permissionId, dto.TenantId, dto.Resource, dto.Action)
+func (c *CreatePermissionCommand) Execute(ctx context.Context, dto *CreatePermissionDto) (*identity.Permission, error) {
+	// Normaliza (minúsculas, sin espacios) y valida contra el catálogo.
+	resource, action, err := policies.ValidatePermission(dto.Resource, dto.Action)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	permissionId := identity.PermissionId(c.provider.Generate())
+	permission, err := identity.NewPermission(permissionId, dto.TenantId, resource, action)
+	if err != nil {
+		return nil, err
 	}
 
-	return c.repo.Create(ctx, permission)
+	if err := c.repo.Create(ctx, permission); err != nil {
+		return nil, err
+	}
+	return permission, nil
 }

@@ -21,7 +21,14 @@ func NewCreatePermissionCommandRepository(db *bun.DB) *CreatePermissionCommandRe
 }
 
 func (r *CreatePermissionCommandRepository) Create(ctx context.Context, permission *identity.Permission) error {
+	taken, err := permissionTaken(ctx, r.db, string(permission.TenantId), permission.Resource, permission.Action, "")
+	if err != nil {
+		return err
+	}
+	if taken {
+		return identity.ErrPermissionTaken
+	}
 	model := mappers.ToPermissionModel(permission)
-	_, err := r.db.NewInsert().Model(model).Exec(ctx)
+	_, err = r.db.NewInsert().Model(model).Exec(ctx)
 	return err
 }

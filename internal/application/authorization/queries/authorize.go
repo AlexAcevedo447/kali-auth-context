@@ -2,6 +2,8 @@ package queries
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 
 	"kali-auth-context/internal/domain/identity"
 	"kali-auth-context/internal/domain/policies"
@@ -104,6 +106,10 @@ func (q *AuthorizeQuery) getUserEffectivePermissions(ctx context.Context, tenant
 			}
 
 			permission, err := q.permissionRepo.GetById(ctx, rolePermission.PermissionId)
+			if errors.Is(err, sql.ErrNoRows) {
+				// Asignación huérfana (permiso borrado): no otorga nada y no rompe la evaluación.
+				continue
+			}
 			if err != nil {
 				return nil, err
 			}

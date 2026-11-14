@@ -32,6 +32,17 @@ func WriteError(c *fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	if errors.Is(err, identity.ErrInsufficientPermissions) || errors.Is(err, identity.ErrPrivilegeEscalation) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	if errors.Is(err, identity.ErrRoleNameTaken) || errors.Is(err, identity.ErrPermissionTaken) ||
+		errors.Is(err, identity.ErrRoleAssigned) || errors.Is(err, identity.ErrPermissionAssigned) ||
+		errors.Is(err, identity.ErrProtectedRole) || errors.Is(err, identity.ErrProtectedPermission) ||
+		errors.Is(err, identity.ErrLastAdministrator) {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
+	}
+
 	if errors.Is(err, identity.ErrEmailAlreadyExists) {
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -56,6 +67,8 @@ func isValidationError(err error) bool {
 		errors.Is(err, identity.ErrRoleNameRequired) ||
 		errors.Is(err, identity.ErrPermissionResource) ||
 		errors.Is(err, identity.ErrPermissionAction) ||
+		errors.Is(err, identity.ErrUnknownResource) ||
+		errors.Is(err, identity.ErrUnknownAction) ||
 		errors.Is(err, identity.ErrAuthorizationRequestRequired) ||
 		errors.Is(err, identity.ErrAuthorizationResourceRequired) ||
 		errors.Is(err, identity.ErrAuthorizationActionRequired) ||

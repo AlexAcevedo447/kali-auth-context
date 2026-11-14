@@ -26,7 +26,7 @@ func (h *CreateRoleHandler) Handle(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
 	}
 
-	err := h.command.Execute(c.UserContext(), &rbaccommands.CreateRoleDto{
+	role, err := h.command.Execute(c.UserContext(), &rbaccommands.CreateRoleDto{
 		TenantId:    identity.TenantId(req.TenantId),
 		Name:        req.Name,
 		Description: req.Description,
@@ -35,5 +35,5 @@ func (h *CreateRoleHandler) Handle(c *fiber.Ctx) error {
 		return shared.WriteError(c, err)
 	}
 
-	return c.SendStatus(fiber.StatusCreated)
+	return c.Status(fiber.StatusCreated).JSON(role)
 }

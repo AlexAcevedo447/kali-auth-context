@@ -24,7 +24,9 @@ func HasPermission(tenantId identity.TenantId, permissions []*identity.Permissio
 		permissionAction := normalizeAuthorizationValue(permission.Action)
 
 		resourceAllowed := permissionResource == "*" || permissionResource == normalizedResource
-		actionAllowed := permissionAction == "*" || permissionAction == normalizedAction
+		// manage incluye read: quien puede modificar un recurso también puede consultarlo.
+		actionAllowed := permissionAction == "*" || permissionAction == normalizedAction ||
+			(normalizedAction == ActionRead && permissionAction == ActionManage)
 
 		if !resourceAllowed {
 			continue

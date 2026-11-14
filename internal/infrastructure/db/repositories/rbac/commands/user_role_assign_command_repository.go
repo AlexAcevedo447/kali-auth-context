@@ -21,7 +21,14 @@ func NewAssignRoleToUserCommandRepository(db *bun.DB) *AssignRoleToUserCommandRe
 }
 
 func (r *AssignRoleToUserCommandRepository) Assign(ctx context.Context, relation *identity.UserRole) error {
+	// Idempotente: si ya está asignado no se duplica.
+	already, err := exists(ctx, r.db,
+		"SELECT 1 FROM user_roles WHERE tenant_id = ? AND user_id = ? AND role_id = ?",
+		string(relation.TenantId), string(relation.UserId), string(relation.RoleId))
+	if err != nil || already {
+		return err
+	}
 	model := mappers.ToUserRoleModel(relation)
-	_, err := r.db.NewInsert().Model(model).Exec(ctx)
+	_, err = r.db.NewInsert().Model(model).Exec(ctx)
 	return err
 }
