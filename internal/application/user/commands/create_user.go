@@ -32,33 +32,36 @@ func NewCreateUserCommand(repo ports.ICreateUserCommandRepository, provider port
 // 2. Genera un nuevo ID de usuario.
 // 3. Hashea la contraseña.
 // 4. Crea el usuario en el repositorio.
-func (c *CreateUserCommand) Execute(ctx context.Context, user *CreateUserDto) error {
-       if err := policies.ValidatePasswordStrength(user.Password); err != nil {
-	       // Si la contraseña no cumple la política, retorna error.
-	       return err
-       }
+func (c *CreateUserCommand) Execute(ctx context.Context, user *CreateUserDto) (*identity.User, error) {
+	if err := policies.ValidatePasswordStrength(user.Password); err != nil {
+		// Si la contraseña no cumple la política, retorna error.
+		return nil, err
+	}
 
-       id := identity.UserId(c.provider.Generate())
+	id := identity.UserId(c.provider.Generate())
 
-       hashedPassword, err := c.hasher.Hash(user.Password)
-       if err != nil {
-	       // Si ocurre error al hashear la contraseña, retorna error.
-	       return err
-       }
+	hashedPassword, err := c.hasher.Hash(user.Password)
+	if err != nil {
+		// Si ocurre error al hashear la contraseña, retorna error.
+		return nil, err
+	}
 
-       domainUser, err := identity.NewUser(
-	       id,
-	       user.TenantId,
-	       user.IdentificationNumber,
-	       user.Username,
-	       user.Email,
-	       hashedPassword,
-       )
-       if err != nil {
-	       // Si ocurre error al crear el usuario de dominio, retorna error.
-	       return err
-       }
+	domainUser, err := identity.NewUser(
+		id,
+		user.TenantId,
+		user.IdentificationNumber,
+		user.Username,
+		user.Email,
+		hashedPassword,
+	)
+	if err != nil {
+		// Si ocurre error al crear el usuario de dominio, retorna error.
+		return nil, err
+	}
 
-       // Guarda el usuario en el repositorio.
-       return c.repo.Create(ctx, domainUser)
+	// Guarda el usuario en el repositorio.
+	if err := c.repo.Create(ctx, domainUser); err != nil {
+		return nil, err
+	}
+	return domainUser, nil
 }

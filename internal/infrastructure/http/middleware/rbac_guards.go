@@ -194,6 +194,36 @@ func (g *RBACGuards) Require(resource, action string) fiber.Handler {
 	}
 }
 
+// RequireAny exige al menos uno de los permisos indicados. Se usa en consultas
+// que necesita más de una funcionalidad: por ejemplo, quien gestiona
+// asignaciones (rbac/manage) necesita ver roles, permisos y usuarios para
+// elegir qué asignar, sin exigirle roles/read, permissions/read ni users/read.
+func (g *RBACGuards) RequireAny(wants ...policies.Grant) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		grants, err := g.actorGrants(c)
+		if err != nil {
+			return internalError(c)
+		}
+		for _, w := range wants {
+			if policies.Covers(grants, w) {
+				return c.Next()
+			}
+		}
+		return writeErr(c, fiber.StatusForbidden, identity.ErrInsufficientPermissions)
+	}
+}
+
+// NotSelf impide aplicar la operación sobre el propio usuario (p. ej. eliminarse).
+func (g *RBACGuards) NotSelf(source, field string, err error) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		tid, sub := actor(c)
+		if target := requestValue(c, source, field); target != "" && target == sub && effectiveTenant(c) == tid {
+			return writeErr(c, fiber.StatusConflict, err)
+		}
+		return c.Next()
+	}
+}
+
 // SelfOr permite consultar los datos propios (el id indicado es el del token y
 // la empresa efectiva es la suya); para otro usuario exige (recurso, acción).
 func (g *RBACGuards) SelfOr(source, field, resource, action string) fiber.Handler {
@@ -308,6 +338,7 @@ func (g *RBACGuards) ProtectSeedPermission(source, field string) fiber.Handler {
 const (
 	ChangeRemoveUserRole       = "remove-user-role"
 	ChangeRemoveRolePermission = "remove-role-permission"
+	ChangeDeleteUser           = "delete-user"
 )
 
 // KeepAdministrator bloquea con 409 un cambio que deje a la empresa sin
@@ -326,11 +357,39 @@ func (g *RBACGuards) KeepAdministrator(change string) fiber.Handler {
 		case ChangeRemoveRolePermission:
 			role, perm := requestValue(c, "body", "role_id"), requestValue(c, "body", "permission_id")
 			skip = func(r assignmentRow) bool { return r.RoleID == role && r.PermissionID == perm }
+		case ChangeDeleteUser:
+			user := c.Params("userId")
+			skip = func(r assignmentRow) bool { return r.UserID == user }
 		default:
 			return internalError(c)
 		}
 		if countAdministrators(rows, nil) > 0 && countAdministrators(rows, skip) == 0 {
 			return writeErr(c, fiber.StatusConflict, identity.ErrLastAdministrator)
+		}
+		return c.Next()
+	}
+}
+
+// ManageUserTarget: editar o eliminar a OTRO usuario exige cubrir todos sus
+// permisos efectivos (no tomar la cuenta ni eliminar a alguien con más
+// privilegios). Operar sobre uno mismo está permitido.
+func (g *RBACGuards) ManageUserTarget(source, field string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		tid, sub := actor(c)
+		target := requestValue(c, source, field)
+		if target == "" || (target == sub && effectiveTenant(c) == tid) {
+			return c.Next()
+		}
+		targetGrants, err := g.EffectiveGrants(c.UserContext(), effectiveTenant(c), target)
+		if err != nil {
+			return internalError(c)
+		}
+		mine, err := g.actorGrants(c)
+		if err != nil {
+			return internalError(c)
+		}
+		if !policies.CoversAll(mine, targetGrants) {
+			return writeErr(c, fiber.StatusForbidden, identity.ErrCannotManageUser)
 		}
 		return c.Next()
 	}

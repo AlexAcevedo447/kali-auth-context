@@ -32,14 +32,16 @@ func WriteError(c *fiber.Ctx, err error) error {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	if errors.Is(err, identity.ErrInsufficientPermissions) || errors.Is(err, identity.ErrPrivilegeEscalation) {
+	if errors.Is(err, identity.ErrInsufficientPermissions) || errors.Is(err, identity.ErrPrivilegeEscalation) ||
+		errors.Is(err, identity.ErrCannotManageUser) {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	if errors.Is(err, identity.ErrRoleNameTaken) || errors.Is(err, identity.ErrPermissionTaken) ||
 		errors.Is(err, identity.ErrRoleAssigned) || errors.Is(err, identity.ErrPermissionAssigned) ||
 		errors.Is(err, identity.ErrProtectedRole) || errors.Is(err, identity.ErrProtectedPermission) ||
-		errors.Is(err, identity.ErrLastAdministrator) {
+		errors.Is(err, identity.ErrLastAdministrator) || errors.Is(err, identity.ErrUserHasRoles) ||
+		errors.Is(err, identity.ErrSelfDeletion) {
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": err.Error()})
 	}
 

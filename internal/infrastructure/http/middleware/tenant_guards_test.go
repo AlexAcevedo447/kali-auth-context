@@ -60,6 +60,11 @@ func (fakeConn) QueryContext(_ context.Context, query string, _ []driver.NamedVa
 		}
 		return &fakeRows{cols: []string{"status"}}, nil
 	}
+	if strings.Contains(strings.ToUpper(query), "SELECT EXISTS") && strings.Contains(query, "user_models") {
+		// ActiveTenant: el usuario del token sigue existiendo en su empresa.
+		_, ok := fakeOwners["user_models"][id]
+		return &fakeRows{cols: []string{"exists"}, vals: [][]driver.Value{{ok}}}, nil
+	}
 	if strings.Contains(strings.ToUpper(query), "SELECT EXISTS") {
 		_, ok := fakeOwners["tenants"][id]
 		return &fakeRows{cols: []string{"exists"}, vals: [][]driver.Value{{ok}}}, nil
@@ -106,7 +111,7 @@ func newTestGuards(t *testing.T) *TenantGuards {
 	fakeOwners = map[string]map[string]string{
 		"tenants":     {platformTenant: "", tenantA: "", tenantB: ""},
 		"roles":       {"role-a": tenantA, "role-b": tenantB},
-		"user_models": {"user-a": tenantA, "user-b": tenantB},
+		"user_models": {"user-a": tenantA, "user-b": tenantB, platformAdminUser: platformTenant, platformPlainUser: platformTenant},
 	}
 	fakeTenantStatus = map[string]string{platformTenant: "ACTIVE", tenantA: "ACTIVE", tenantB: "ACTIVE"}
 	fakeOwnersMu.Unlock()
@@ -377,5 +382,17 @@ func TestActiveTenant_UnknownTenant_Unauthorized(t *testing.T) {
 	status, body := call(t, app, http.MethodGet, "/users", "tenant-ghost", "")
 	if status != http.StatusUnauthorized || body["error"] != "invalid access token" {
 		t.Fatalf("expected 401 invalid access token, got %d %v", status, body)
+	}
+}
+
+func TestActiveTenant_DeletedUser_TokenRejected(t *testing.T) {
+	app := newGuardedApp(newTestGuards(t))
+	if status, body := callAs(t, app, http.MethodGet, "/users", tenantA, "user-a", ""); status != http.StatusOK {
+		t.Fatalf("existing user: expected 200, got %d %v", status, body)
+	}
+	// "user-ghost" no existe (eliminado): su token, aunque válido, se rechaza.
+	status, body := callAs(t, app, http.MethodGet, "/users", tenantA, "user-ghost", "")
+	if status != http.StatusUnauthorized || body["error"] != "invalid access token" {
+		t.Fatalf("deleted user: expected 401 invalid access token, got %d %v", status, body)
 	}
 }

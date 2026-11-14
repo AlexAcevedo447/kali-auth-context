@@ -34,7 +34,7 @@ func (h *CreateHandler) Handle(c *fiber.Ctx) error {
 	}
 
 	// Ejecuta el caso de uso de registro de usuario con los datos recibidos.
-	err := h.command.Execute(c.UserContext(), &usercommands.CreateUserDto{
+	user, err := h.command.Execute(c.UserContext(), &usercommands.CreateUserDto{
 		TenantId:             identity.TenantId(req.TenantId),
 		IdentificationNumber: req.IdentificationNumber,
 		Username:             req.Username,
@@ -46,6 +46,6 @@ func (h *CreateHandler) Handle(c *fiber.Ctx) error {
 		return shared.WriteError(c, err)
 	}
 
-	// Si el registro es exitoso, retorna 201 Created.
-	return c.SendStatus(fiber.StatusCreated)
+	// 201 con el usuario creado (sin contraseña).
+	return c.Status(fiber.StatusCreated).JSON(shared.ToUserResponse(user))
 }

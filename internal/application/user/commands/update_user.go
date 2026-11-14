@@ -5,6 +5,7 @@ import (
 	"kali-auth-context/internal/domain/identity"
 	"kali-auth-context/internal/domain/policies"
 	"kali-auth-context/internal/ports"
+	"strings"
 )
 
 type UpdateUserDto struct {
@@ -26,26 +27,32 @@ func NewUpdateUserCommand(repo ports.IUpdateUserCommandRepository, hasher ports.
 }
 
 func (c *UpdateUserCommand) Execute(ctx context.Context, dto *UpdateUserDto) error {
-	if err := policies.ValidatePasswordStrength(dto.Password); err != nil {
-		return err
+	if dto.TenantId == "" {
+		return identity.ErrTenantRequired
+	}
+	if strings.TrimSpace(dto.Email) == "" {
+		return identity.ErrEmailRequired
 	}
 
-	hashedPassword, err := c.hasher.Hash(dto.Password)
-	if err != nil {
-		return err
+	// Contraseña opcional: vacía conserva la actual; si se indica, cumple la política.
+	hashedPassword := ""
+	if dto.Password != "" {
+		if err := policies.ValidatePasswordStrength(dto.Password); err != nil {
+			return err
+		}
+		hashed, err := c.hasher.Hash(dto.Password)
+		if err != nil {
+			return err
+		}
+		hashedPassword = hashed
 	}
 
-	user, err := identity.NewUser(
-		dto.Id,
-		dto.TenantId,
-		dto.IdentificationNumber,
-		dto.Username,
-		dto.Email,
-		hashedPassword,
-	)
-	if err != nil {
-		return err
-	}
-
-	return c.repo.Update(ctx, user)
+	return c.repo.Update(ctx, &identity.User{
+		Id:                   dto.Id,
+		TenantId:             dto.TenantId,
+		IdentificationNumber: dto.IdentificationNumber,
+		Username:             dto.Username,
+		Email:                strings.TrimSpace(dto.Email),
+		Password:             hashedPassword, // vacío = no se actualiza
+	})
 }

@@ -87,6 +87,18 @@ func (g *TenantGuards) ActiveTenant() fiber.Handler {
 		if status != "ACTIVE" {
 			return forbidden(c, "tenant is suspended")
 		}
+		// El usuario del token debe seguir existiendo en su empresa: un usuario
+		// eliminado pierde el acceso también con los tokens ya emitidos.
+		if sub, _ := c.Locals("auth.sub").(string); sub != "" {
+			exists, err := g.db.NewSelect().TableExpr("user_models").
+				Where("id = ? AND tenant_id = ?", sub, tid).Exists(c.UserContext())
+			if err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+			}
+			if !exists {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid access token"})
+			}
+		}
 		return c.Next()
 	}
 }

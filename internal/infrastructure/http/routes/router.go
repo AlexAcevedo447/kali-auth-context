@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"kali-auth-context/internal/domain/identity"
+	"kali-auth-context/internal/domain/policies"
 	authcommands "kali-auth-context/internal/infrastructure/http/contexts/auth/commands"
 	authorizationqueries "kali-auth-context/internal/infrastructure/http/contexts/authorization/queries"
 	rbaccommands "kali-auth-context/internal/infrastructure/http/contexts/rbac/commands"
@@ -194,12 +196,15 @@ func (r *Router) Register(app *fiber.App) {
 	protected.Get("/auth/session", rb.SessionHandler)
 
 	users := protected.Group("/users")
-	users.Post("/", r.idempotency, r.createUser.Handle)
-	users.Get("/by-email", r.getUserByEmail.Handle)
-	users.Get("/", r.listUsers.Handle)
-	users.Put("/:userId", r.guards.Owned(ownedUser), r.idempotency, r.updateUser.Handle)
-	users.Delete("/:userId", r.guards.Owned(ownedUser), r.idempotency, r.deleteUser.Handle)
-	users.Get("/:userId", r.guards.Owned(ownedUser), r.getUserById.Handle)
+	// users/read para consultar (manage incluye read) y users/manage para modificar.
+	// Editar o eliminar a otro usuario exige cubrir sus permisos; eliminar no puede
+	// dejar a la empresa sin administrador efectivo.
+	users.Post("/", rb.Require("users", "manage"), r.idempotency, r.createUser.Handle)
+	users.Get("/by-email", rb.Require("users", "read"), r.getUserByEmail.Handle)
+	users.Get("/", rb.RequireAny(grant("users", "read"), grant("rbac", "manage")), r.listUsers.Handle)
+	users.Put("/:userId", r.guards.Owned(ownedUser), rb.Require("users", "manage"), rb.ManageUserTarget("param", "userId"), r.idempotency, r.updateUser.Handle)
+	users.Delete("/:userId", r.guards.Owned(ownedUser), rb.Require("users", "manage"), rb.NotSelf("param", "userId", identity.ErrSelfDeletion), rb.ManageUserTarget("param", "userId"), rb.KeepAdministrator(middleware.ChangeDeleteUser), r.idempotency, r.deleteUser.Handle)
+	users.Get("/:userId", r.guards.Owned(ownedUser), rb.SelfOr("param", "userId", "users", "read"), r.getUserById.Handle)
 
 	// Administración de empresas: solo el tenant de plataforma.
 	tenants := protected.Group("/tenants", r.guards.PlatformAdmin())
@@ -213,18 +218,18 @@ func (r *Router) Register(app *fiber.App) {
 
 	roles := protected.Group("/roles")
 	roles.Post("/", rb.Require("roles", "manage"), r.idempotency, r.createRole.Handle)
-	roles.Get("/", rb.Require("roles", "read"), r.listRoles.Handle)
+	roles.Get("/", rb.RequireAny(grant("roles", "read"), grant("rbac", "manage")), r.listRoles.Handle)
 	roles.Put("/:roleId", r.guards.Owned(ownedRole), rb.Require("roles", "manage"), rb.ProtectSeedRole("param", "roleId"), r.idempotency, r.updateRole.Handle)
 	roles.Delete("/:roleId", r.guards.Owned(ownedRole), rb.Require("roles", "manage"), rb.ProtectSeedRole("param", "roleId"), r.idempotency, r.deleteRole.Handle)
-	roles.Get("/:roleId", r.guards.Owned(ownedRole), rb.Require("roles", "read"), r.getRoleById.Handle)
+	roles.Get("/:roleId", r.guards.Owned(ownedRole), rb.RequireAny(grant("roles", "read"), grant("rbac", "manage")), r.getRoleById.Handle)
 
 	permissions := protected.Group("/permissions")
 	permissions.Get("/catalog", middleware.CatalogHandler)
 	permissions.Post("/", rb.Require("permissions", "manage"), rb.NoEscalationPermissionWrite(), r.idempotency, r.createPermission.Handle)
-	permissions.Get("/", rb.Require("permissions", "read"), r.listPermissions.Handle)
+	permissions.Get("/", rb.RequireAny(grant("permissions", "read"), grant("rbac", "manage")), r.listPermissions.Handle)
 	permissions.Put("/:permissionId", r.guards.Owned(ownedPermission), rb.Require("permissions", "manage"), rb.ProtectSeedPermission("param", "permissionId"), rb.NoEscalationPermissionWrite(), r.idempotency, r.updatePermission.Handle)
 	permissions.Delete("/:permissionId", r.guards.Owned(ownedPermission), rb.Require("permissions", "manage"), rb.ProtectSeedPermission("param", "permissionId"), r.idempotency, r.deletePermission.Handle)
-	permissions.Get("/:permissionId", r.guards.Owned(ownedPermission), rb.Require("permissions", "read"), r.getPermissionById.Handle)
+	permissions.Get("/:permissionId", r.guards.Owned(ownedPermission), rb.RequireAny(grant("permissions", "read"), grant("rbac", "manage")), r.getPermissionById.Handle)
 
 	rbac := protected.Group("/rbac")
 	// Usuario, rol y permiso deben ser del mismo tenant (Owned); además rbac/manage,
@@ -234,6 +239,11 @@ func (r *Router) Register(app *fiber.App) {
 	rbac.Post("/roles/permissions/assign", r.guards.Owned(bodyRole, bodyPermission), rb.Require("rbac", "manage"), rb.NoEscalationRolePermission(), r.idempotency, r.assignPermissionToRole.Handle)
 	rbac.Post("/roles/permissions/remove", r.guards.Owned(bodyRole, bodyPermission), rb.Require("rbac", "manage"), rb.ProtectSeedRole("body", "role_id"), rb.NoEscalationRolePermission(), rb.KeepAdministrator(middleware.ChangeRemoveRolePermission), r.removePermissionFromRole.Handle)
 	rbac.Get("/users/roles", r.guards.Owned(queryUser), rb.SelfOr("query", "user_id", "rbac", "manage"), r.getUserRoles.Handle)
-	rbac.Get("/roles/permissions", r.guards.Owned(queryRole), rb.Require("roles", "read"), r.getRolePermissions.Handle)
+	rbac.Get("/roles/permissions", r.guards.Owned(queryRole), rb.RequireAny(grant("roles", "read"), grant("rbac", "manage")), r.getRolePermissions.Handle)
 	rbac.Get("/users/effective-permissions", r.guards.Owned(queryUser), rb.SelfOr("query", "user_id", "rbac", "manage"), r.getUserEffectivePermission.Handle)
+}
+
+// grant abrevia un permiso (recurso, acción) para RequireAny.
+func grant(resource, action string) policies.Grant {
+	return policies.Grant{Resource: resource, Action: action}
 }

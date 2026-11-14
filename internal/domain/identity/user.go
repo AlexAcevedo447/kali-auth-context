@@ -10,6 +10,13 @@ var (
 	// ErrEmailAlreadyExists indica que ya existe un usuario con ese email
 	// dentro del mismo tenant (unicidad de email por tenant, no global).
 	ErrEmailAlreadyExists = errors.New("a user with this email already exists for this tenant")
+	// ErrUserHasRoles: no se elimina un usuario con roles asignados (sin cascada).
+	ErrUserHasRoles = errors.New("user has roles assigned")
+	// ErrCannotManageUser: editar o eliminar a otro usuario exige cubrir sus permisos.
+	ErrCannotManageUser = errors.New("cannot manage a user with privileges you do not have")
+	// ErrSelfDeletion: desde la administración de usuarios nadie se elimina a sí
+	// mismo; otro administrador autorizado puede hacerlo.
+	ErrSelfDeletion = errors.New("you cannot delete your own user")
 )
 
 type User struct {
