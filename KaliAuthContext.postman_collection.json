@@ -137,9 +137,143 @@
           "path": ["api", "v1", "auth", "authorize"]
         }
       }
+    },
+    {
+      "name": "Sesión (estado de la empresa)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/auth/session",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "auth", "session"]
+        },
+        "description": "200 si el token es válido y su empresa está activa; 403 tenant is suspended si la empresa fue suspendida (también con tokens emitidos antes). Lo usa kali-invoice-service."
+      }
+    },
+    {
+      "name": "Empresas: listar",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/tenants",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "tenants"]
+        },
+        "description": "Solo administrador de plataforma: usuario de la empresa de plataforma con el permiso tenants/manage (el admin sembrado lo tiene con */*). Cualquier otro usuario: 403 platform administrator required."
+      }
+    },
+    {
+      "name": "Empresas: crear",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Empresa Ejemplo\",\n  \"code\": \"empresa-ejemplo\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/tenants",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "tenants"]
+        },
+        "description": "Solo administrador de plataforma: usuario de la empresa de plataforma con el permiso tenants/manage (el admin sembrado lo tiene con */*). Cualquier otro usuario: 403 platform administrator required. El código es opcional (se deriva del nombre). 400 nombre vacío o código inválido; 409 código duplicado."
+      }
+    },
+    {
+      "name": "Empresas: consultar",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/tenants/{{tenant_id_objetivo}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "tenants", "{{tenant_id_objetivo}}"]
+        },
+        "description": "Solo administrador de plataforma: usuario de la empresa de plataforma con el permiso tenants/manage (el admin sembrado lo tiene con */*). Cualquier otro usuario: 403 platform administrator required. 404 si no existe."
+      }
+    },
+    {
+      "name": "Empresas: editar",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Empresa Ejemplo\",\n  \"code\": \"empresa-ejemplo\",\n  \"status\": \"ACTIVE\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:18080/api/v1/tenants/{{tenant_id_objetivo}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "tenants", "{{tenant_id_objetivo}}"]
+        },
+        "description": "Solo administrador de plataforma: usuario de la empresa de plataforma con el permiso tenants/manage (el admin sembrado lo tiene con */*). Cualquier otro usuario: 403 platform administrator required. PUT reemplaza nombre, código y estado: envía el estado actual para no cambiarlo. Cambiar el código afecta el próximo inicio de sesión con código. 400 estado inválido; 404 si no existe; 409 código duplicado o si se intenta suspender la empresa de plataforma."
+      }
+    },
+    {
+      "name": "Empresas: suspender",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/tenants/{{tenant_id_objetivo}}/suspend",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "tenants", "{{tenant_id_objetivo}}", "suspend"]
+        },
+        "description": "Solo administrador de plataforma: usuario de la empresa de plataforma con el permiso tenants/manage (el admin sembrado lo tiene con */*). Cualquier otro usuario: 403 platform administrator required. Bloquea el login y también los tokens vigentes de esa empresa (auth inmediato; facturación en máx. TENANT_STATUS_CACHE_SECONDS). 409 platform tenant cannot be suspended; 404 si no existe."
+      }
+    },
+    {
+      "name": "Empresas: activar",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "Idempotency-Key", "value": "{{$guid}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:18080/api/v1/tenants/{{tenant_id_objetivo}}/activate",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "18080",
+          "path": ["api", "v1", "tenants", "{{tenant_id_objetivo}}", "activate"]
+        },
+        "description": "Solo administrador de plataforma: usuario de la empresa de plataforma con el permiso tenants/manage (el admin sembrado lo tiene con */*). Cualquier otro usuario: 403 platform administrator required. Los tokens aún vigentes vuelven a funcionar; 404 si no existe."
+      }
     }
   ],
   "variable": [
-    { "key": "access_token", "value": "" }
+    { "key": "access_token", "value": "" },
+    { "key": "tenant_id_objetivo", "value": "" }
   ]
 }

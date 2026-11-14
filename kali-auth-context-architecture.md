@@ -61,10 +61,27 @@ Microservicio de identidad para un ERP modular. Hoy cubre autenticación, autori
   - roles, permisos y usuarios referenciados por id (ruta, query o body) deben pertenecer al
     tenant efectivo; si no → `404 resource not found` (no se revela que existen);
   - no se puede asignar un rol de una empresa a un usuario de otra;
-  - `/api/v1/tenants` solo para el tenant de plataforma (`SEED_MASTER_TENANT_ID`), que además
-    puede indicar un tenant destino existente al crear usuarios/roles.
+  - `/api/v1/tenants` solo para el **administrador de plataforma**: usuario de la empresa de
+    plataforma (`SEED_MASTER_TENANT_ID`) con el permiso RBAC `tenants/manage` (o comodín; el
+    admin sembrado tiene `*/*`). Un usuario de la plataforma sin ese permiso → `403 platform
+    administrator required`. Solo ese administrador puede indicar un tenant destino existente al
+    crear usuarios/roles; cualquier otro → `403 tenant mismatch`;
+  - `ActiveTenant`: toda ruta protegida exige que la empresa del token esté activa (consulta en
+    cada petición). Una empresa suspendida → `403 tenant is suspended`, también con tokens emitidos
+    antes de la suspensión; al reactivarla, los tokens aún vigentes vuelven a funcionar.
 - Tenant con `code` legible y único (`SEED_MASTER_TENANT_CODE` para el maestro; para los
   existentes se deriva del nombre al migrar).
+- Administración de empresas (`/api/v1/tenants`, solo plataforma):
+  - el nombre se guarda sin espacios a los lados; vacío o solo espacios → `400 tenant name is required`;
+  - `PUT` reemplaza nombre, código y estado; un estado distinto de `ACTIVE`/`SUSPENDED` →
+    `400 tenant status must be ACTIVE or SUSPENDED` (vacío conserva el comportamiento previo: `ACTIVE`);
+  - editar, activar o suspender una empresa inexistente → `404 resource not found`;
+  - la empresa de plataforma no se puede suspender (`/suspend` o `PUT` con `SUSPENDED`) →
+    `409 platform tenant cannot be suspended`;
+  - el login devuelve `is_platform_tenant` (true solo para `SEED_MASTER_TENANT_ID`), informativo
+    para la interfaz; la autorización la aplica `PlatformAdmin`.
+- `GET /api/v1/auth/session` (protegido): 200 si el token es válido y su empresa está activa.
+  `kali-invoice-service` lo consulta con el mismo token para bloquear empresas suspendidas.
 - Login mitiga enumeración con fake hash y soporta NeedsRehash
 - Password policy exige mínimo 12 caracteres, mayúscula, minúscula, dígito, símbolo y sin espacios
 - Password hasher actual: Argon2id con compatibilidad de verificación para hashes bcrypt heredados
