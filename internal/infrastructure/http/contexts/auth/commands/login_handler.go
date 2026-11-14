@@ -15,10 +15,13 @@ import (
 type LoginHandler struct {
 	command     *authcommands.LoginCommand
 	tokenIssuer *security.AccessTokenIssuer
+	// platformTenantID es la empresa de plataforma (SEED_MASTER_TENANT_ID), la
+	// misma que usa middleware.TenantGuards.PlatformOnly para /tenants.
+	platformTenantID string
 }
 
-func NewLoginHandler(command *authcommands.LoginCommand, tokenIssuer *security.AccessTokenIssuer) *LoginHandler {
-	return &LoginHandler{command: command, tokenIssuer: tokenIssuer}
+func NewLoginHandler(command *authcommands.LoginCommand, tokenIssuer *security.AccessTokenIssuer, platformTenantID string) *LoginHandler {
+	return &LoginHandler{command: command, tokenIssuer: tokenIssuer, platformTenantID: platformTenantID}
 }
 
 // loginRequest no admite tenant_id: el tenant se resuelve en el servidor. El
@@ -41,6 +44,10 @@ type loginResponse struct {
 	NeedsRehash bool                `json:"needs_rehash"`
 	Roles       []string            `json:"roles"`
 	Permissions []map[string]string `json:"permissions"`
+	// IsPlatformTenant indica si la sesión pertenece a la empresa de plataforma,
+	// la única autorizada a administrar empresas (/api/v1/tenants). Es solo
+	// informativo para la interfaz: la autorización la aplica el servidor.
+	IsPlatformTenant bool `json:"is_platform_tenant"`
 }
 
 // Maneja la petición POST para iniciar sesión.
@@ -98,5 +105,7 @@ func (h *LoginHandler) Handle(c *fiber.Ctx) error {
 		NeedsRehash: result.NeedsRehash,
 		Roles:       roleNames,
 		Permissions: perms,
+		IsPlatformTenant: h.platformTenantID != "" &&
+			string(result.TenantId) == h.platformTenantID,
 	})
 }

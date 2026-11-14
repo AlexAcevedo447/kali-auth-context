@@ -29,6 +29,8 @@ import (
 var (
 	fakeOwnersMu sync.Mutex
 	fakeOwners   = map[string]map[string]string{}
+	// fakeTenantStatus: estado de cada empresa (ActiveTenant). Ausente = no existe.
+	fakeTenantStatus = map[string]string{}
 )
 
 var idPattern = regexp.MustCompile(`"?id"? = '([^']*)'`)
@@ -52,6 +54,12 @@ func (fakeConn) QueryContext(_ context.Context, query string, _ []driver.NamedVa
 	fakeOwnersMu.Lock()
 	defer fakeOwnersMu.Unlock()
 
+	if strings.Contains(query, `"status"`) && strings.Contains(query, "tenants") {
+		if st, ok := fakeTenantStatus[id]; ok {
+			return &fakeRows{cols: []string{"status"}, vals: [][]driver.Value{{st}}}, nil
+		}
+		return &fakeRows{cols: []string{"status"}}, nil
+	}
 	if strings.Contains(strings.ToUpper(query), "SELECT EXISTS") {
 		_, ok := fakeOwners["tenants"][id]
 		return &fakeRows{cols: []string{"exists"}, vals: [][]driver.Value{{ok}}}, nil
@@ -100,14 +108,26 @@ func newTestGuards(t *testing.T) *TenantGuards {
 		"roles":       {"role-a": tenantA, "role-b": tenantB},
 		"user_models": {"user-a": tenantA, "user-b": tenantB},
 	}
+	fakeTenantStatus = map[string]string{platformTenant: "ACTIVE", tenantA: "ACTIVE", tenantB: "ACTIVE"}
 	fakeOwnersMu.Unlock()
 	sqldb, err := sql.Open("tenantguards-fake", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqldb.Close() })
-	return NewTenantGuards(bun.NewDB(sqldb, pgdialect.New()), platformTenant)
+	// Solo "platform-admin" tiene tenants/manage; "platform-user" es de la
+	// plataforma pero sin ese permiso.
+	return NewTenantGuards(bun.NewDB(sqldb, pgdialect.New()), platformTenant).
+		WithAuthorizer(func(_ context.Context, tenantID, userID, resource, action string) (bool, error) {
+			return tenantID == platformTenant && userID == platformAdminUser &&
+				resource == PlatformAdminResource && action == PlatformAdminAction, nil
+		})
 }
+
+const (
+	platformAdminUser = "platform-admin"
+	platformPlainUser = "platform-user"
+)
 
 // --- App de prueba -------------------------------------------------------------
 
@@ -120,6 +140,9 @@ func newGuardedApp(g *TenantGuards) *fiber.App {
 		if tid := c.Get("X-Test-Tid"); tid != "" {
 			c.Locals("auth.tid", tid)
 		}
+		if sub := c.Get("X-Test-Sub"); sub != "" {
+			c.Locals("auth.sub", sub)
+		}
 		return c.Next()
 	}
 	echo := func(c *fiber.Ctx) error {
@@ -131,7 +154,7 @@ func newGuardedApp(g *TenantGuards) *fiber.App {
 			"body":      body,
 		})
 	}
-	protected := app.Group("", fakeJWT, g.Scope())
+	protected := app.Group("", fakeJWT, g.ActiveTenant(), g.Scope())
 	protected.Get("/users", echo)
 	protected.Post("/users", echo)
 	protected.Get("/users/:userId", g.Owned(OwnedRef{Source: "param", Field: "userId", Table: "user_models"}), echo)
@@ -140,12 +163,17 @@ func newGuardedApp(g *TenantGuards) *fiber.App {
 		OwnedRef{Source: "body", Field: "role_id", Table: "roles"},
 	), echo)
 	protected.Get("/rbac/users/roles", g.Owned(OwnedRef{Source: "query", Field: "user_id", Table: "user_models"}), echo)
-	tenants := protected.Group("/tenants", g.PlatformOnly())
+	tenants := protected.Group("/tenants", g.PlatformAdmin())
 	tenants.Get("", echo)
 	return app
 }
 
 func call(t *testing.T, app *fiber.App, method, target, tid, body string) (int, map[string]any) {
+	t.Helper()
+	return callAs(t, app, method, target, tid, "", body)
+}
+
+func callAs(t *testing.T, app *fiber.App, method, target, tid, sub, body string) (int, map[string]any) {
 	t.Helper()
 	var reader io.Reader
 	if body != "" {
@@ -157,6 +185,9 @@ func call(t *testing.T, app *fiber.App, method, target, tid, body string) (int, 
 	}
 	if tid != "" {
 		req.Header.Set("X-Test-Tid", tid)
+	}
+	if sub != "" {
+		req.Header.Set("X-Test-Sub", sub)
 	}
 	resp, err := app.Test(req, -1)
 	if err != nil {
@@ -224,7 +255,7 @@ func TestScope_NoTenantSent_InjectsTokenTenant(t *testing.T) {
 
 func TestScope_PlatformCanTargetExistingTenant(t *testing.T) {
 	app := newGuardedApp(newTestGuards(t))
-	status, body := call(t, app, http.MethodGet, "/users?tenant_id="+tenantB, platformTenant, "")
+	status, body := callAs(t, app, http.MethodGet, "/users?tenant_id="+tenantB, platformTenant, platformAdminUser, "")
 	if status != http.StatusOK || body["effective"] != tenantB {
 		t.Fatalf("expected 200 scoped to tenant-b, got %d %v", status, body)
 	}
@@ -232,7 +263,7 @@ func TestScope_PlatformCanTargetExistingTenant(t *testing.T) {
 
 func TestScope_PlatformTargetingUnknownTenant_NotFound(t *testing.T) {
 	app := newGuardedApp(newTestGuards(t))
-	status, body := call(t, app, http.MethodGet, "/users?tenant_id=tenant-ghost", platformTenant, "")
+	status, body := callAs(t, app, http.MethodGet, "/users?tenant_id=tenant-ghost", platformTenant, platformAdminUser, "")
 	if status != http.StatusNotFound || body["error"] != "resource not found" {
 		t.Fatalf("expected 404, got %d %v", status, body)
 	}
@@ -268,30 +299,83 @@ func TestOwned_ResourceOfSameTenant_Passes(t *testing.T) {
 	}
 }
 
-// --- PlatformOnly --------------------------------------------------------------
+// --- PlatformAdmin (RBAC) ---------------------------------------------------------
 
-func TestPlatformOnly_NonPlatformTenant_Forbidden(t *testing.T) {
+func TestPlatformAdmin_NonPlatformTenant_Forbidden(t *testing.T) {
 	app := newGuardedApp(newTestGuards(t))
-	status, body := call(t, app, http.MethodGet, "/tenants", tenantA, "")
+	status, body := callAs(t, app, http.MethodGet, "/tenants", tenantA, "user-a", "")
 	if status != http.StatusForbidden || body["error"] != "platform administrator required" {
 		t.Fatalf("expected 403 platform administrator required, got %d %v", status, body)
 	}
 }
 
-func TestPlatformOnly_PlatformTenant_Passes(t *testing.T) {
+func TestPlatformAdmin_PlatformUserWithoutPermission_Forbidden(t *testing.T) {
 	app := newGuardedApp(newTestGuards(t))
-	status, body := call(t, app, http.MethodGet, "/tenants", platformTenant, "")
+	status, body := callAs(t, app, http.MethodGet, "/tenants", platformTenant, platformPlainUser, "")
+	if status != http.StatusForbidden || body["error"] != "platform administrator required" {
+		t.Fatalf("expected 403 for a platform user without tenants/manage, got %d %v", status, body)
+	}
+}
+
+func TestPlatformAdmin_AuthorizedPlatformAdmin_Passes(t *testing.T) {
+	app := newGuardedApp(newTestGuards(t))
+	status, body := callAs(t, app, http.MethodGet, "/tenants", platformTenant, platformAdminUser, "")
 	if status != http.StatusOK {
 		t.Fatalf("expected 200, got %d %v", status, body)
 	}
 }
 
-func TestPlatformOnly_EmptyPlatformConfig_ForbidsEveryone(t *testing.T) {
+func TestPlatformAdmin_NoAuthorizer_FailsClosed(t *testing.T) {
+	g := newTestGuards(t)
+	g.authorize = nil
+	app := newGuardedApp(g)
+	if status, _ := callAs(t, app, http.MethodGet, "/tenants", platformTenant, platformAdminUser, ""); status != http.StatusForbidden {
+		t.Fatalf("expected 403 without authorizer, got %d", status)
+	}
+}
+
+func TestPlatformAdmin_EmptyPlatformConfig_ForbidsEveryone(t *testing.T) {
 	g := newTestGuards(t)
 	g.platformTenantID = ""
 	app := newGuardedApp(g)
-	status, _ := call(t, app, http.MethodGet, "/tenants", platformTenant, "")
-	if status != http.StatusForbidden {
+	if status, _ := callAs(t, app, http.MethodGet, "/tenants", platformTenant, platformAdminUser, ""); status != http.StatusForbidden {
 		t.Fatalf("expected 403 when platform tenant is not configured, got %d", status)
+	}
+}
+
+func TestScope_PlatformUserWithoutPermission_CannotTargetOtherTenant(t *testing.T) {
+	app := newGuardedApp(newTestGuards(t))
+	status, body := callAs(t, app, http.MethodGet, "/users?tenant_id="+tenantB, platformTenant, platformPlainUser, "")
+	if status != http.StatusForbidden || body["error"] != "tenant mismatch" {
+		t.Fatalf("expected 403 tenant mismatch, got %d %v", status, body)
+	}
+}
+
+// --- ActiveTenant ----------------------------------------------------------------
+
+func TestActiveTenant_SuspendedTenant_BlocksExistingTokens(t *testing.T) {
+	app := newGuardedApp(newTestGuards(t))
+	fakeOwnersMu.Lock()
+	fakeTenantStatus[tenantA] = "SUSPENDED"
+	fakeOwnersMu.Unlock()
+	status, body := call(t, app, http.MethodGet, "/users", tenantA, "")
+	if status != http.StatusForbidden || body["error"] != "tenant is suspended" {
+		t.Fatalf("expected 403 tenant is suspended, got %d %v", status, body)
+	}
+
+	// Al reactivar, el mismo token vuelve a funcionar.
+	fakeOwnersMu.Lock()
+	fakeTenantStatus[tenantA] = "ACTIVE"
+	fakeOwnersMu.Unlock()
+	if status, body := call(t, app, http.MethodGet, "/users", tenantA, ""); status != http.StatusOK {
+		t.Fatalf("expected 200 after reactivation, got %d %v", status, body)
+	}
+}
+
+func TestActiveTenant_UnknownTenant_Unauthorized(t *testing.T) {
+	app := newGuardedApp(newTestGuards(t))
+	status, body := call(t, app, http.MethodGet, "/users", "tenant-ghost", "")
+	if status != http.StatusUnauthorized || body["error"] != "invalid access token" {
+		t.Fatalf("expected 401 invalid access token, got %d %v", status, body)
 	}
 }

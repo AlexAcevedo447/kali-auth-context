@@ -97,7 +97,7 @@ func newTestIssuer(t *testing.T) *security.AccessTokenIssuer {
 func loginApp(t *testing.T, repo *recordingCandidates) *fiber.App {
 	cmd := authcommands.NewLoginCommand(repo, noRoles{}, noRoles{}, noRoles{}, noPerms{}, plainHasher{})
 	app := fiber.New()
-	app.Post("/login", NewLoginHandler(cmd, newTestIssuer(t)).Handle)
+	app.Post("/login", NewLoginHandler(cmd, newTestIssuer(t), platformTenantForTests).Handle)
 	return app
 }
 
@@ -169,5 +169,27 @@ func TestLoginHandler_ErrorMapping(t *testing.T) {
 				t.Fatalf("expected %d %q, got %d %v", tc.wantStatus, tc.wantError, status, body)
 			}
 		})
+	}
+}
+
+const platformTenantForTests = "tenant-platform"
+
+func TestLoginHandler_IsPlatformTenantFlag(t *testing.T) {
+	cases := []struct {
+		tenant identity.TenantId
+		want   bool
+	}{
+		{"tenant-platform", true},
+		{"tenant-a", false},
+	}
+	for _, tc := range cases {
+		repo := &recordingCandidates{all: []ports.LoginCandidate{cand(tc.tenant, "acme", identity.TenantStatusActive)}}
+		status, body := postLogin(t, loginApp(t, repo), `{"email":"ana@example.com","password":"pw"}`)
+		if status != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d %v", tc.tenant, status, body)
+		}
+		if body["is_platform_tenant"] != tc.want {
+			t.Fatalf("%s: expected is_platform_tenant=%v, got %v", tc.tenant, tc.want, body["is_platform_tenant"])
+		}
 	}
 }

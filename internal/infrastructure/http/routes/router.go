@@ -167,7 +167,9 @@ func (r *Router) Register(app *fiber.App) {
 
 	// Protected endpoints (JWT required)
 	// Todas las rutas protegidas operan en el tenant del token (ver TenantGuards).
-	protected := v1.Group("", r.jwtAuth, r.guards.Scope())
+	// ActiveTenant consulta el estado de la empresa en cada petición: suspenderla
+	// bloquea también los tokens ya emitidos.
+	protected := v1.Group("", r.jwtAuth, r.guards.ActiveTenant(), r.guards.Scope())
 	ownedUser := middleware.OwnedRef{Source: "param", Field: "userId", Table: "user_models"}
 	ownedRole := middleware.OwnedRef{Source: "param", Field: "roleId", Table: "roles"}
 	ownedPermission := middleware.OwnedRef{Source: "param", Field: "permissionId", Table: "permissions"}
@@ -177,6 +179,15 @@ func (r *Router) Register(app *fiber.App) {
 	queryUser := middleware.OwnedRef{Source: "query", Field: "user_id", Table: "user_models"}
 	queryRole := middleware.OwnedRef{Source: "query", Field: "role_id", Table: "roles"}
 	protected.Post("/auth/authorize", r.authorize.Handle)
+	// Comprobación de sesión para otros servicios (p. ej. facturación): responde 200
+	// solo si el token es válido y su empresa está activa (403 tenant is suspended).
+	protected.Get("/auth/session", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"tenant_id": c.Locals("auth.tid"),
+			"user_id":   c.Locals("auth.sub"),
+			"status":    "ACTIVE",
+		})
+	})
 
 	users := protected.Group("/users")
 	users.Post("/", r.idempotency, r.createUser.Handle)
@@ -187,7 +198,7 @@ func (r *Router) Register(app *fiber.App) {
 	users.Get("/:userId", r.guards.Owned(ownedUser), r.getUserById.Handle)
 
 	// Administración de empresas: solo el tenant de plataforma.
-	tenants := protected.Group("/tenants", r.guards.PlatformOnly())
+	tenants := protected.Group("/tenants", r.guards.PlatformAdmin())
 	tenants.Post("/", r.idempotency, r.createTenant.Handle)
 	tenants.Get("/by-name", r.getTenantByName.Handle)
 	tenants.Get("/", r.listTenants.Handle)

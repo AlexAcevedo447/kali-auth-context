@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/uptrace/bun"
 
@@ -26,10 +27,26 @@ func (r *UpdateTenantCommandRepository) Update(ctx context.Context, tenant *iden
 	if model.Code != "" {
 		columns = append(columns, "code")
 	}
-	_, err := r.db.NewUpdate().
+	res, err := r.db.NewUpdate().
 		Model(model).
 		Column(columns...).
 		Where("id = ?", model.Id).
 		Exec(ctx)
-	return translateTenantCodeConflict(err)
+	if err != nil {
+		return translateTenantCodeConflict(err)
+	}
+	return requireAffectedRow(res)
+}
+
+// requireAffectedRow devuelve sql.ErrNoRows (→ 404) si la sentencia no modificó
+// ninguna fila, es decir, si la empresa no existe.
+func requireAffectedRow(res sql.Result) error {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }

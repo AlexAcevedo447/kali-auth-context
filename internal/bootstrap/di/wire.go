@@ -2,6 +2,9 @@ package bootstrap
 
 import (
 	"context"
+	"database/sql"
+	"errors"
+	"kali-auth-context/internal/domain/identity"
 	"time"
 
 	"github.com/google/wire"
@@ -138,9 +141,9 @@ func InitializeContainer() (*CoreContainer, error) {
 	tenantModule := NewTenantModule(
 		NewTenantCommands(
 			tenantcommands.NewCreateTenantCommand(createTenantRepo, uuidProvider),
-			tenantcommands.NewUpdateTenantCommand(updateTenantRepo),
+			tenantcommands.NewUpdateTenantCommand(updateTenantRepo).WithPlatformTenant(identity.TenantId(cfg.SeedMasterTenantID)),
 			tenantcommands.NewActivateTenantCommand(activateTenantRepo),
-			tenantcommands.NewSuspendTenantCommand(suspendTenantRepo),
+			tenantcommands.NewSuspendTenantCommand(suspendTenantRepo).WithPlatformTenant(identity.TenantId(cfg.SeedMasterTenantID)),
 		),
 		NewTenantQueries(
 			tenantqueries.NewGetTenantByIdQuery(getTenantByIdRepo),
@@ -173,7 +176,7 @@ func InitializeContainer() (*CoreContainer, error) {
 		),
 	)
 
-	loginHandler := authhttpcommands.NewLoginHandler(authModule.Login, accessTokenIssuer)
+	loginHandler := authhttpcommands.NewLoginHandler(authModule.Login, accessTokenIssuer, cfg.SeedMasterTenantID)
 	authorizeHandler := authorizationhttpqueries.NewCheckHandler(authorizationModule.Authorize)
 
 	createUserHandler := userhttpcommands.NewCreateHandler(userModule.Commands.Create)
@@ -248,7 +251,25 @@ func InitializeContainer() (*CoreContainer, error) {
 			getRolePermissionsHandler,
 			getUserEffectivePermissionsHandler,
 			jwksHandler,
-		).WithTenantGuards(middleware.NewTenantGuards(database, cfg.SeedMasterTenantID)),
+		).WithTenantGuards(
+			middleware.NewTenantGuards(database, cfg.SeedMasterTenantID).
+				WithAuthorizer(func(ctx context.Context, tenantID, userID, resource, action string) (bool, error) {
+					decision, err := authorizationModule.Authorize.Handle(ctx, &authorizationqueries.AuthorizeDto{
+						TenantId: identity.TenantId(tenantID),
+						UserId:   identity.UserId(userID),
+						Resource: resource,
+						Action:   action,
+					})
+					if err != nil {
+						// Empresa o usuario inexistente: no autorizado (sin filtrar el detalle).
+						if errors.Is(err, sql.ErrNoRows) {
+							return false, nil
+						}
+						return false, err
+					}
+					return decision.Allowed, nil
+				}),
+		),
 	}
 
 	return NewCoreContainer(cfg, database, securityModule, authModule, authorizationModule, httpModule, userModule, tenantModule, rbacModule), nil

@@ -22,15 +22,73 @@ const localsEffectiveTenant = "tenant.effective"
 type TenantGuards struct {
 	db               *bun.DB
 	platformTenantID string
+	authorize        Authorizer
 }
+
+// Authorizer evalúa los permisos efectivos (RBAC) de un usuario. En producción
+// es AuthorizeQuery (roles → permisos con comodines).
+type Authorizer func(ctx context.Context, tenantID, userID, resource, action string) (bool, error)
+
+// Permiso RBAC que habilita la administración de empresas desde la empresa de
+// plataforma (el seed maestro lo cubre con "*"/"*").
+const (
+	PlatformAdminResource = "tenants"
+	PlatformAdminAction   = "manage"
+)
 
 func NewTenantGuards(db *bun.DB, platformTenantID string) *TenantGuards {
 	return &TenantGuards{db: db, platformTenantID: platformTenantID}
 }
 
+// WithAuthorizer conecta la evaluación RBAC. Sin ella, ninguna operación de
+// administración de plataforma se autoriza (falla cerrado).
+func (g *TenantGuards) WithAuthorizer(a Authorizer) *TenantGuards {
+	g.authorize = a
+	return g
+}
+
 func (g *TenantGuards) isPlatform(c *fiber.Ctx) bool {
 	tid, _ := c.Locals("auth.tid").(string)
 	return g.platformTenantID != "" && tid == g.platformTenantID
+}
+
+// isPlatformAdmin: usuario de la empresa de plataforma CON el permiso
+// tenants/manage. Ser de la empresa de plataforma no basta.
+func (g *TenantGuards) isPlatformAdmin(c *fiber.Ctx) (bool, error) {
+	if !g.isPlatform(c) || g.authorize == nil {
+		return false, nil
+	}
+	tid, _ := c.Locals("auth.tid").(string)
+	sub, _ := c.Locals("auth.sub").(string)
+	if sub == "" {
+		return false, nil
+	}
+	return g.authorize(c.UserContext(), tid, sub, PlatformAdminResource, PlatformAdminAction)
+}
+
+// ActiveTenant rechaza cualquier operación protegida si la empresa del token no
+// está activa. Se consulta en cada petición, así que suspender una empresa
+// bloquea también los tokens ya emitidos; al reactivarla, los tokens aún
+// vigentes vuelven a funcionar (la vigencia la fija JWT_ACCESS_TOKEN_TTL_MINUTES).
+func (g *TenantGuards) ActiveTenant() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		tid, _ := c.Locals("auth.tid").(string)
+		if tid == "" {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "token is missing required claims"})
+		}
+		var status string
+		err := g.db.NewSelect().Table("tenants").Column("status").Where("id = ?", tid).Scan(c.UserContext(), &status)
+		if errors.Is(err, sql.ErrNoRows) {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid access token"})
+		}
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		}
+		if status != "ACTIVE" {
+			return forbidden(c, "tenant is suspended")
+		}
+		return c.Next()
+	}
 }
 
 func forbidden(c *fiber.Ctx, msg string) error {
@@ -57,7 +115,16 @@ func (g *TenantGuards) Scope() fiber.Handler {
 			if requested == "" || requested == tid {
 				return tid, nil
 			}
+			// Apuntar a otra empresa es administración de plataforma: exige el
+			// permiso tenants/manage, no solo pertenecer a la empresa de plataforma.
 			if !platform {
+				return "", errTenantMismatch
+			}
+			admin, err := g.isPlatformAdmin(c)
+			if err != nil {
+				return "", err
+			}
+			if !admin {
 				return "", errTenantMismatch
 			}
 			exists, err := g.exists(c.UserContext(), "tenants", requested)
@@ -126,10 +193,16 @@ func (g *TenantGuards) writeScopeError(c *fiber.Ctx, err error) error {
 	}
 }
 
-// PlatformOnly restringe la administración de empresas (tenants) al tenant de plataforma.
-func (g *TenantGuards) PlatformOnly() fiber.Handler {
+// PlatformAdmin restringe una ruta al administrador de plataforma: usuario de
+// la empresa de plataforma con el permiso tenants/manage (RBAC). Cualquier otro
+// usuario, incluido uno de la plataforma sin ese permiso, recibe 403.
+func (g *TenantGuards) PlatformAdmin() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		if !g.isPlatform(c) {
+		admin, err := g.isPlatformAdmin(c)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
+		}
+		if !admin {
 			return forbidden(c, "platform administrator required")
 		}
 		return c.Next()

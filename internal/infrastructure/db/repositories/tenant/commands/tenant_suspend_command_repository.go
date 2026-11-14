@@ -21,10 +21,13 @@ func NewSuspendTenantCommandRepository(db *bun.DB) *SuspendTenantCommandReposito
 }
 
 func (r *SuspendTenantCommandRepository) Suspend(ctx context.Context, tenantId identity.TenantId) error {
-	_, err := r.db.NewUpdate().
+	res, err := r.db.NewUpdate().
 		Model((*models.TenantModel)(nil)).
 		Set("status = ?", string(identity.TenantStatusSuspended)).
 		Where("id = ?", string(tenantId)).
 		Exec(ctx)
-	return err
+	if err != nil {
+		return err
+	}
+	return requireAffectedRow(res)
 }

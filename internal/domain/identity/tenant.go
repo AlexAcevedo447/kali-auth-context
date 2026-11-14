@@ -24,6 +24,11 @@ var (
 	// cuentas de varias empresas: el usuario debe indicar el código de empresa.
 	ErrTenantCodeRequired = errors.New("company code required")
 	ErrTenantSuspended    = errors.New("tenant is suspended")
+	// ErrTenantStatusInvalid: el estado solo puede ser ACTIVE o SUSPENDED.
+	ErrTenantStatusInvalid = errors.New("tenant status must be ACTIVE or SUSPENDED")
+	// ErrPlatformTenantSuspension: la empresa de plataforma no se puede suspender
+	// (dejaría sin acceso a la administración de empresas).
+	ErrPlatformTenantSuspension = errors.New("platform tenant cannot be suspended")
 )
 
 // tenantCodePattern define el código legible de la empresa (slug): es lo que
@@ -69,6 +74,8 @@ func NewTenant(id TenantId, name string) (*Tenant, error) {
 		return nil, ErrTenantRequired
 	}
 
+	// Un nombre solo con espacios equivale a vacío; se guarda sin espacios a los lados.
+	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, ErrTenantNameRequired
 	}

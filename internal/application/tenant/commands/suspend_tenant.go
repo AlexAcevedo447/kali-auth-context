@@ -8,7 +8,14 @@ import (
 )
 
 type SuspendTenantCommand struct {
-	repo ports.ISuspendTenantCommandRepository
+	repo             ports.ISuspendTenantCommandRepository
+	platformTenantID identity.TenantId
+}
+
+// WithPlatformTenant indica la empresa de plataforma, que no se puede suspender.
+func (c *SuspendTenantCommand) WithPlatformTenant(id identity.TenantId) *SuspendTenantCommand {
+	c.platformTenantID = id
+	return c
 }
 
 func NewSuspendTenantCommand(repo ports.ISuspendTenantCommandRepository) *SuspendTenantCommand {
@@ -18,6 +25,9 @@ func NewSuspendTenantCommand(repo ports.ISuspendTenantCommandRepository) *Suspen
 func (c *SuspendTenantCommand) Execute(ctx context.Context, tenantId identity.TenantId) error {
 	if tenantId == "" {
 		return identity.ErrTenantRequired
+	}
+	if c.platformTenantID != "" && tenantId == c.platformTenantID {
+		return identity.ErrPlatformTenantSuspension
 	}
 
 	return c.repo.Suspend(ctx, tenantId)
