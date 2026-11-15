@@ -3,8 +3,14 @@ package policies
 import (
 	"errors"
 	"unicode"
+	"unicode/utf8"
 )
 
+// MinPasswordLength se mide en caracteres Unicode (code points), no en bytes:
+// "Ñandú#Clav1" tiene 11 caracteres aunque ocupe 13 bytes en UTF-8.
+// No hay máximo propio: las contraseñas nuevas se guardan con Argon2id, que usa
+// la contraseña completa. bcrypt (límite efectivo de 72 bytes) solo verifica
+// hashes heredados "$2…" (el login los señala con needs_rehash; no se migran solos).
 const MinPasswordLength = 12
 
 var (
@@ -17,7 +23,7 @@ var (
 )
 
 func ValidatePasswordStrength(password string) error {
-	if len(password) < MinPasswordLength {
+	if utf8.RuneCountInString(password) < MinPasswordLength {
 		return ErrPasswordTooShort
 	}
 

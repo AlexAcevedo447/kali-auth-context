@@ -36,6 +36,23 @@ Al arrancar:
 `JWT_ISSUER` y `JWT_AUDIENCE` deben ser idénticos a los de `kali-invoice-service`
 (`http://localhost:8080` y `account`).
 
+## Política de contraseñas
+
+Al crear un usuario o cambiar su contraseña (`internal/domain/policies/password_policy.go`):
+
+- Mínimo **12 caracteres Unicode** (code points, no bytes): `Ñandú#Clav1` (11 caracteres, 13
+  bytes) se rechaza; `Ñandú#Clave1` se acepta.
+- Al menos una mayúscula, una minúscula, un dígito y un símbolo (categorías Unicode) y sin
+  espacios (incluido el espacio no separable).
+- Sin máximo propio. Las contraseñas nuevas se guardan con **Argon2id**, que usa la contraseña
+  completa (también más de 72 bytes). bcrypt solo verifica hashes heredados `$2…`: su límite
+  efectivo es de 72 bytes (lo que sigue no se compara). El inicio de sesión los señala con
+  `needs_rehash: true`, pero la migración automática a Argon2id **no está implementada**. En la
+  base de desarrollo revisada (14 nov 2026) no hay hashes bcrypt: 277 de 277 son Argon2id.
+- La política no se aplica al iniciar sesión: las contraseñas existentes no cambian.
+
+La interfaz (`invoice-kali-front`) aplica las mismas reglas antes de enviar el formulario.
+
 ## Pruebas
 
 ```bash
